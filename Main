@@ -90,13 +90,30 @@ End Function
 Public Function GetLigneText(ByVal cName As Variant, _
                              ByVal routeKey As Variant, _
                              ByVal tName As Variant) As String
+    On Error Resume Next
     Dim arr As Variant, tournParts As Variant
     Dim tournNum As String, secValue As String
     Dim i As Long
+    
+    GetLigneText = "" ' Valeur par défaut
+    
+    ' Vérifications de base
+    If IsNull(tName) Or IsEmpty(tName) Or Trim(CStr(tName)) = "" Then
+        Exit Function
+    End If
+    
     arr = g_dataArr
-    tournParts = Split(CStr(tName), " ")
+    tournParts = Split(Trim(CStr(tName)), " ")
+    
+    ' Vérifier que le tableau n'est pas vide
+    If UBound(tournParts) < 0 Then Exit Function
+    
     tournNum = tournParts(0)
-    If UBound(tournParts) >= 1 Then secValue = Replace(Replace(tournParts(1), "(", ""), ")", "")
+    secValue = ""
+    If UBound(tournParts) >= 1 Then 
+        secValue = Replace(Replace(tournParts(1), "(", ""), ")", "")
+    End If
+    
     For i = 2 To UBound(arr, 1)
         If CStr(arr(i, g_colComm)) = CStr(cName) _
         And CStr(arr(i, g_colVoie)) = CStr(routeKey) _
@@ -111,22 +128,36 @@ Public Function GetLigneText(ByVal cName As Variant, _
             End If
         End If
     Next
-    GetLigneText = ""
 End Function
 
 Public Function GetLigne3Text(ByVal cName As Variant, _
                               ByVal routeKey As Variant, _
                               ByVal tName As Variant) As String
+    On Error Resume Next
     Dim arr As Variant, tournParts As Variant
     Dim tournNum As String, secValue As String
     Dim i As Long, ligne3 As String
     Dim dict As Object
+    
+    GetLigne3Text = "" ' Valeur par défaut
+    
+    ' Vérifications de base
+    If IsNull(tName) Or IsEmpty(tName) Or Trim(CStr(tName)) = "" Then
+        Exit Function
+    End If
 
     Set dict = CreateObject("Scripting.Dictionary")
     arr = g_dataArr
-    tournParts = Split(CStr(tName), " ")
+    tournParts = Split(Trim(CStr(tName)), " ")
+    
+    ' Vérifier que le tableau n'est pas vide
+    If UBound(tournParts) < 0 Then Exit Function
+    
     tournNum = tournParts(0)
-    If UBound(tournParts) >= 1 Then secValue = Replace(Replace(tournParts(1), "(", ""), ")", "")
+    secValue = ""
+    If UBound(tournParts) >= 1 Then 
+        secValue = Replace(Replace(tournParts(1), "(", ""), ")", "")
+    End If
 
     For i = 2 To UBound(arr, 1)
         If CStr(arr(i, g_colComm)) = CStr(cName) _
@@ -145,8 +176,6 @@ Public Function GetLigne3Text(ByVal cName As Variant, _
 
     If dict.Count > 0 Then
         GetLigne3Text = Join(dict.Keys, " - ") & " -"
-    Else
-        GetLigne3Text = ""
     End If
 End Function
 
