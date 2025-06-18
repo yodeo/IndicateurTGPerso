@@ -215,11 +215,13 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
     Dim communeKeys As Variant, voieKeys As Variant
     Dim lastWord As String, prevLetter As String
     Dim bornes As String, fullText As String
+    Dim communeVar As Variant, voieVar As Variant, tourneeVar As Variant
     
     communeKeys = communes.Keys
     communeKeys = QuickSortByLastWordArray(communeKeys)
     
-    For Each commune In communeKeys
+    For Each communeVar In communeKeys
+        commune = CStr(communeVar)
         outputRow = outputRow + 1
         
         ' En-tête de commune
@@ -247,8 +249,10 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         Dim allTournees As Object
         Set allTournees = CreateObject("Scripting.Dictionary")
         
-        For Each voie In communeData.Keys
-            For Each tournee In communeData(voie).Keys
+        For Each voieVar In communeData.Keys
+            voie = CStr(voieVar)
+            For Each tourneeVar In communeData(voie).Keys
+                tournee = CStr(tourneeVar)
                 allTournees(tournee) = True
                 If communeData(voie).Count = 1 Then
                     If Not tourneeCount.Exists(tournee) Then tourneeCount(tournee) = 0
@@ -264,7 +268,8 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         ElseIf useToutSauf And allTournees.Count <= 4 Then
             Dim majorityTour As String, maxCount As Long
             maxCount = 0
-            For Each tournee In tourneeCount.Keys
+            For Each tourneeVar In tourneeCount.Keys
+                tournee = CStr(tourneeVar)
                 If tourneeCount(tournee) > maxCount Then
                     maxCount = tourneeCount(tournee)
                     majorityTour = tournee
@@ -286,17 +291,15 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         bufferCount = 0
         
         prevLetter = ""
-        For Each voie In voieKeys
-            Dim voieStr As String
-            voieStr = CStr(voie)
-            For Each tournee In communeData(voieStr).Keys
-                Dim tourneeStr As String
-                tourneeStr = CStr(tournee)
-                keyStr = communeData(voieStr)(tourneeStr)
+        For Each voieVar In voieKeys
+            voie = CStr(voieVar)
+            For Each tourneeVar In communeData(voie).Keys
+                tournee = CStr(tourneeVar)
+                keyStr = communeData(voie)(tournee)
                 
                 ' Construire le texte
-                lastWord = GetLastWordFast(voieStr)
-                fullText = UCase$(lastWord) & " (" & GetAbbreviatedFast(voieStr) & ")"
+                lastWord = GetLastWordFast(voie)
+                fullText = UCase$(lastWord) & " (" & GetAbbreviatedFast(voie) & ")"
                 
                 ' Ajouter ligne3
                 If dataDict(keyStr)("ligne3").Count > 0 Then
@@ -309,15 +312,15 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
                 End If
                 
                 ' Calculer les bornes si multi-tournées
-                If communeData(voieStr).Count > 1 Then
+                If communeData(voie).Count > 1 Then
                     bornes = CalculateBornesFast(dataDict(keyStr)("nums"))
                     If bornes <> "" Then fullText = fullText & " " & bornes
                 End If
                 
                 bufferCount = bufferCount + 1
                 ligneBuffer(bufferCount, 1) = fullText
-                ligneBuffer(bufferCount, 2) = tourneeStr
-                ligneBuffer(bufferCount, 3) = IIf(communeData(voieStr).Count > 1, 1, 0)
+                ligneBuffer(bufferCount, 2) = tournee
+                ligneBuffer(bufferCount, 3) = IIf(communeData(voie).Count > 1, 1, 0)
                 ligneBuffer(bufferCount, 4) = IIf(Left(UCase$(lastWord), 1) <> prevLetter, 1, 0)
                 ligneBuffer(bufferCount, 5) = Len(lastWord)
                 
