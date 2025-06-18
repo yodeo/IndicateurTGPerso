@@ -15,8 +15,30 @@ Public g_colLigne3  As Long
 
 Public Function GetLastWord(txt As Variant) As String
     Dim parts As Variant
-    parts = Split(Trim(CStr(txt)), " ")
-    GetLastWord = parts(UBound(parts))
+    Dim trimmedText As String
+    
+    ' Gérer les cas où txt est vide ou null
+    If IsNull(txt) Or IsEmpty(txt) Then
+        GetLastWord = ""
+        Exit Function
+    End If
+    
+    trimmedText = Trim(CStr(txt))
+    
+    ' Si le texte est vide après trim
+    If Len(trimmedText) = 0 Then
+        GetLastWord = ""
+        Exit Function
+    End If
+    
+    parts = Split(trimmedText, " ")
+    
+    ' Vérifier que le tableau n'est pas vide
+    If UBound(parts) >= 0 Then
+        GetLastWord = parts(UBound(parts))
+    Else
+        GetLastWord = ""
+    End If
 End Function
 
 Public Function SortByLastWord(arr As Variant) As Variant
