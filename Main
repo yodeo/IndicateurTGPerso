@@ -10,513 +10,36 @@ Public g_colTour    As Long
 Public g_colSecable As Long
 Public g_colLigne   As Long
 Public g_colLigne3  As Long
-Public g_ligneCache As Object  ' Cache pour GetLigneText
-Public g_ligne3Cache As Object ' Cache pour GetLigne3Text
 
-' === UTILITAIRES OPTIMISÉS ===
+' === STRUCTURES DE DONNÉES OPTIMISÉES ===
+Private Type TourneeInfo
+    commune As String
+    voie As String
+    tournee As String
+    nums() As Long
+    numCount As Long
+    ligneText As String
+    ligne3Text As String
+    isMultiTournee As Boolean
+End Type
 
-Public Function GetLastWord(txt As Variant) As String
-    Dim lastSpacePos As Long
-    Dim strText As String
-    
-    On Error Resume Next
-    strText = Trim(CStr(txt))
-    If Len(strText) = 0 Then
-        GetLastWord = ""
-        Exit Function
-    End If
-    
-    lastSpacePos = InStrRev(strText, " ")
-    If lastSpacePos = 0 Then
-        GetLastWord = strText
-    Else
-        GetLastWord = Mid(strText, lastSpacePos + 1)
-    End If
-End Function
+' === API Windows pour mesurer le temps ===
+#If VBA7 Then
+    Private Declare PtrSafe Function GetTickCount Lib "kernel32" () As Long
+#Else
+    Private Declare Function GetTickCount Lib "kernel32" () As Long
+#End If
 
-' Fonction de tri optimisée avec QuickSort
-Public Function QuickSortByLastWord(arr As Variant) As Variant
-    Dim tmp As Variant
-    tmp = arr
-    If UBound(tmp) > 0 Then
-        QuickSortRecursive tmp, 0, UBound(tmp)
-    End If
-    QuickSortByLastWord = tmp
-End Function
-
-Private Sub QuickSortRecursive(arr As Variant, ByVal low As Long, ByVal high As Long)
-    Dim i As Long, j As Long, pivot As String, temp As Variant
-    
-    If low < high Then
-        i = low
-        j = high
-        pivot = UCase$(GetLastWord(arr((low + high) \ 2)))
-        
-        Do While i <= j
-            Do While UCase$(GetLastWord(arr(i))) < pivot And i < high
-                i = i + 1
-            Loop
-            Do While pivot < UCase$(GetLastWord(arr(j))) And j > low
-                j = j - 1
-            Loop
-            If i <= j Then
-                temp = arr(i)
-                arr(i) = arr(j)
-                arr(j) = temp
-                i = i + 1
-                j = j - 1
-            End If
-        Loop
-        
-        If low < j Then QuickSortRecursive arr, low, j
-        If i < high Then QuickSortRecursive arr, i, high
-    End If
-End Sub
-
-Public Function GetAbbreviatedRest(vName As Variant) As String
-    Static abbrDict As Object
-    Dim parts As Variant, firstWord As String
-    Dim strName As String
-    
-    On Error Resume Next
-    strName = Trim(CStr(vName))
-    If Len(strName) = 0 Then
-        GetAbbreviatedRest = ""
-        Exit Function
-    End If
-    
-    ' Initialiser le dictionnaire d'abréviations une seule fois
-    If abbrDict Is Nothing Then
-        Set abbrDict = CreateObject("Scripting.Dictionary")
-        abbrDict("IMPASSE") = "IMP."
-        abbrDict("ROUTE") = "RTE."
-        abbrDict("AVENUE") = "AV."
-        abbrDict("BOULEVARD") = "BD."
-        abbrDict("CHEMIN") = "CH."
-        abbrDict("ALLEE") = "ALL."
-        abbrDict("PLACE") = "PL."
-        abbrDict("SQUARE") = "SQ."
-    End If
-    
-    parts = Split(strName, " ")
-    If UBound(parts) < 0 Then
-        GetAbbreviatedRest = strName
-        Exit Function
-    End If
-    
-    firstWord = UCase$(parts(0))
-    If abbrDict.Exists(firstWord) Then
-        parts(0) = abbrDict(firstWord)
-    End If
-    
-    ' Reconstruire uniquement les n-1 premiers mots
-    If UBound(parts) > 0 Then
-        ReDim Preserve parts(0 To UBound(parts) - 1)
-    End If
-    
-    GetAbbreviatedRest = Join(parts, " ")
-End Function
-
-' Fonctions optimisées avec cache
-Public Function GetLigneText(ByVal cName As Variant, _
-                             ByVal routeKey As Variant, _
-                             ByVal tName As Variant) As String
-    Dim cacheKey As String
-    
-    On Error Resume Next
-    cacheKey = CStr(cName) & "|" & CStr(routeKey) & "|" & CStr(tName)
-    
-    If g_ligneCache.Exists(cacheKey) Then
-        GetLigneText = g_ligneCache(cacheKey)
-        Exit Function
-    End If
-    
-    GetLigneText = ""
-    g_ligneCache(cacheKey) = ""
-End Function
-
-Public Function GetLigne3Text(ByVal cName As Variant, _
-                              ByVal routeKey As Variant, _
-                              ByVal tName As Variant) As String
-    Dim cacheKey As String
-    
-    On Error Resume Next
-    cacheKey = CStr(cName) & "|" & CStr(routeKey) & "|" & CStr(tName)
-    
-    If g_ligne3Cache.Exists(cacheKey) Then
-        GetLigne3Text = g_ligne3Cache(cacheKey)
-        Exit Function
-    End If
-    
-    GetLigne3Text = ""
-    g_ligne3Cache(cacheKey) = ""
-End Function
-
-' === CHARGEMENT OPTIMISÉ DES DONNÉES ===
-
-Public Function LoadTourneeData(ws As Worksheet) As Object
-    Dim dictCom As Object, dictVoie As Object, dictTour As Object, numDict As Object
-    Dim i As Long, cName As String, vName As Variant
-    Dim secValue As Variant, secText As String
-    Dim tNameRaw As String, tName As String
-    Dim numKey As String
-    Dim tournParts As Variant, tournNum As String
-    Dim ligneText As String, ligne3Text As String
-    Dim cacheKey As String
-
-    Set g_wsSrc = ws
-    g_dataArr = ws.UsedRange.Value
-    
-    ' Initialiser les caches
-    Set g_ligneCache = CreateObject("Scripting.Dictionary")
-    Set g_ligne3Cache = CreateObject("Scripting.Dictionary")
-
-    ' Détection des colonnes
-    For i = 1 To UBound(g_dataArr, 2)
-        Select Case Trim(UCase$(g_dataArr(1, i)))
-            Case "COMMUNE":   g_colComm = i
-            Case "VOIE":      g_colVoie = i
-            Case "NUMÉRO", "NUMERO": g_colNum = i
-            Case "TOURNÉE", "TOURNEE": g_colTour = i
-            Case "SÉCABLE", "SECABLE": g_colSecable = i
-            Case "LIGNE":     g_colLigne = i
-            Case "LIGNE 3":   g_colLigne3 = i
-        End Select
-    Next i
-    
-    If g_colComm * g_colVoie * g_colNum * g_colTour = 0 Then
-        Err.Raise vbObjectError, , "Colonnes obligatoires introuvables"
-    End If
-
-    Set dictCom = CreateObject("Scripting.Dictionary")
-    
-    ' Premier passage : construction des dictionnaires et des caches
-    For i = 2 To UBound(g_dataArr, 1)
-        cName = CStr(g_dataArr(i, g_colComm))
-        vName = g_dataArr(i, g_colVoie)
-        numKey = CStr(g_dataArr(i, g_colNum))
-        tNameRaw = CStr(g_dataArr(i, g_colTour))
-        
-        ' Gestion du sécable
-        secValue = ""
-        If g_colSecable > 0 Then
-            secValue = Trim(CStr(g_dataArr(i, g_colSecable)))
-        End If
-        
-        If Len(secValue) > 0 Then
-            secText = "(" & secValue & ")"
-            tName = tNameRaw & " " & secText
-        Else
-            tName = tNameRaw
-        End If
-        
-        ' Construction du cache pour les lignes
-        cacheKey = cName & "|" & CStr(vName) & "|" & tName
-        
-        ' Cache pour Ligne
-        If g_colLigne > 0 And Not g_ligneCache.Exists(cacheKey) Then
-            ligneText = Trim(CStr(g_dataArr(i, g_colLigne)))
-            If Len(ligneText) > 0 Then
-                g_ligneCache(cacheKey) = ligneText
-            End If
-        End If
-        
-        ' Cache pour Ligne 3
-        If g_colLigne3 > 0 Then
-            ligne3Text = Trim(CStr(g_dataArr(i, g_colLigne3)))
-            If Len(ligne3Text) > 0 Then
-                If g_ligne3Cache.Exists(cacheKey) Then
-                    ' Ajouter à la liste existante si pas déjà présent
-                    Dim existingTexts As String
-                    existingTexts = g_ligne3Cache(cacheKey)
-                    If InStr(existingTexts, ligne3Text) = 0 Then
-                        g_ligne3Cache(cacheKey) = existingTexts & " - " & ligne3Text
-                    End If
-                Else
-                    g_ligne3Cache(cacheKey) = ligne3Text
-                End If
-            End If
-        End If
-        
-        ' Construction des dictionnaires
-        If Not dictCom.Exists(cName) Then
-            Set dictVoie = CreateObject("Scripting.Dictionary")
-            dictCom.Add cName, dictVoie
-        Else
-            Set dictVoie = dictCom(cName)
-        End If
-
-        If Not dictVoie.Exists(vName) Then
-            Set dictTour = CreateObject("Scripting.Dictionary")
-            dictVoie.Add vName, dictTour
-        Else
-            Set dictTour = dictVoie(vName)
-        End If
-
-        If Not dictTour.Exists(tName) Then
-            Set numDict = CreateObject("Scripting.Dictionary")
-            numDict.Add numKey, True
-            dictTour.Add tName, numDict
-        Else
-            If Not dictTour(tName).Exists(numKey) Then
-                dictTour(tName).Add numKey, True
-            End If
-        End If
-    Next i
-    
-    ' Finaliser le cache Ligne3 (ajouter les " -" à la fin)
-    Dim key As Variant
-    For Each key In g_ligne3Cache.Keys
-        g_ligne3Cache(key) = g_ligne3Cache(key) & " -"
-    Next
-
-    Set LoadTourneeData = dictCom
-End Function
-
-' === GÉNÉRATION OPTIMISÉE ===
-
-Public Sub GenerateIndicateurFlexible(dictCom As Object, wsOut As Worksheet, _
-                                     nbColumns As Long, useToutSauf As Boolean)
-    Dim cName As Variant, dictVoie As Object, dictTour As Object
-    Dim dictAllTours As Object, countPerTour As Object
-    Dim majorityTour As String, maxCount As Long, shouldUseToutSauf As Boolean
-    Dim routeKey As Variant, tName As Variant, keyNum As Variant
-    Dim currentRow As Long, prevLetter As String, currentLetter As String
-    Dim oddMin As Long, oddMax As Long, evenMin As Long, evenMax As Long
-    Dim oddPart As String, evenPart As String, bornes As String
-    Dim fullVoie As String, lenLast As Long, ligneText As String, ligne3Text As String
-    Dim lignes() As Variant, ligneCount As Long, info As Variant
-    Dim idx As Long, r As Long, colOff As Long
-    Dim n As Long, totalCols As Long, lastCol As String
-    Dim sortedCommunes As Variant, sortedVoies As Variant
-    Dim outputData() As Variant, outputRow As Long
-    Dim numList() As Long, numCount As Long, j As Long
-    
-    ' Calcul du nombre total de colonnes
-    totalCols = nbColumns * 2
-    lastCol = Chr(64 + totalCols)
-    
-    ' Préallocation du tableau de sortie
-    ReDim outputData(1 To 10000, 1 To totalCols)
-    outputRow = 0
-    
-    ' Tri des communes une seule fois
-    sortedCommunes = dictCom.Keys
-    sortedCommunes = QuickSortByLastWord(sortedCommunes)
-    
-    For Each cName In sortedCommunes
-        prevLetter = ""
-        Set dictVoie = dictCom(cName)
-        
-        ' Déterminer toutes les tournées de la commune
-        Set dictAllTours = CreateObject("Scripting.Dictionary")
-        For Each routeKey In dictVoie.Keys
-            For Each tName In dictVoie(routeKey).Keys
-                dictAllTours(tName) = True
-            Next
-        Next
-        
-        ' Ajouter l'en-tête de commune
-        outputRow = outputRow + 1
-        If dictAllTours.Count = 1 Then
-            outputData(outputRow, 1) = cName & " (" & dictAllTours.Keys()(0) & ")"
-        Else
-            shouldUseToutSauf = useToutSauf And (dictAllTours.Count <= 4)
-            If shouldUseToutSauf Then
-                ' Calcul rapide de la tournée majoritaire
-                Set countPerTour = CreateObject("Scripting.Dictionary")
-                For Each routeKey In dictVoie.Keys
-                    Set dictTour = dictVoie(routeKey)
-                    If dictTour.Count = 1 Then
-                        tName = dictTour.Keys()(0)
-                        countPerTour(tName) = countPerTour(tName) + 1
-                    End If
-                Next
-                majorityTour = "": maxCount = 0
-                For Each tName In countPerTour.Keys
-                    If countPerTour(tName) > maxCount Then
-                        maxCount = countPerTour(tName)
-                        majorityTour = tName
-                    End If
-                Next
-                outputData(outputRow, 1) = cName & " (" & majorityTour & ") sauf :"
-            Else
-                outputData(outputRow, 1) = cName
-            End If
-        End If
-        
-        ' Préparer la liste des lignes
-        ReDim lignes(1 To 1000)
-        ligneCount = 0
-        
-        ' Tri des voies
-        sortedVoies = dictVoie.Keys
-        sortedVoies = QuickSortByLastWord(sortedVoies)
-        
-        For Each routeKey In sortedVoies
-            Set dictTour = dictVoie(routeKey)
-            
-            ' Filtrage pour mode "Tout sauf"
-            If shouldUseToutSauf And dictTour.Count = 1 And dictTour.Exists(majorityTour) Then
-                ' Ne pas inclure
-            Else
-                For Each tName In dictTour.Keys
-                    ' Calcul optimisé des bornes
-                    If dictTour.Count = 1 Then
-                        bornes = ""
-                    Else
-                        ' Collecter tous les numéros en une seule passe
-                        ReDim numList(1 To dictTour(tName).Count)
-                        numCount = 0
-                        For Each keyNum In dictTour(tName).Keys
-                            If IsNumeric(keyNum) Then
-                                numCount = numCount + 1
-                                numList(numCount) = CLng(keyNum)
-                            End If
-                        Next
-                        
-                        If numCount > 0 Then
-                            ' Tri rapide des numéros
-                            For i = 1 To numCount - 1
-                                For j = i + 1 To numCount
-                                    If numList(i) > numList(j) Then
-                                        n = numList(i)
-                                        numList(i) = numList(j)
-                                        numList(j) = n
-                                    End If
-                                Next
-                            Next
-                            
-                            ' Calcul des bornes en une passe
-                            oddMin = 999999: oddMax = -1
-                            evenMin = 999999: evenMax = -1
-                            For i = 1 To numCount
-                                If numList(i) Mod 2 = 0 Then
-                                    If numList(i) < evenMin Then evenMin = numList(i)
-                                    If numList(i) > evenMax Then evenMax = numList(i)
-                                Else
-                                    If numList(i) < oddMin Then oddMin = numList(i)
-                                    If numList(i) > oddMax Then oddMax = numList(i)
-                                End If
-                            Next
-                            
-                            ' Construction des bornes
-                            oddPart = ""
-                            If oddMin <= oddMax Then
-                                If oddMin = oddMax Then
-                                    oddPart = CStr(oddMin)
-                                Else
-                                    oddPart = CStr(oddMin) & " à " & CStr(oddMax)
-                                End If
-                            End If
-                            
-                            evenPart = ""
-                            If evenMin <= evenMax Then
-                                If evenMin = evenMax Then
-                                    evenPart = CStr(evenMin)
-                                Else
-                                    evenPart = CStr(evenMin) & " à " & CStr(evenMax)
-                                End If
-                            End If
-                            
-                            If oddPart <> "" And evenPart <> "" Then
-                                bornes = oddPart & " et " & evenPart
-                            ElseIf oddPart <> "" Then
-                                bornes = oddPart
-                            Else
-                                bornes = evenPart
-                            End If
-                        Else
-                            bornes = ""
-                        End If
-                    End If
-                    
-                    ' Construction du texte de voie
-                    lenLast = Len(GetLastWord(routeKey))
-                    ligneText = GetLigneText(cName, routeKey, tName)
-                    ligne3Text = GetLigne3Text(cName, routeKey, tName)
-                    
-                    fullVoie = UCase$(GetLastWord(routeKey)) & " (" & _
-                               GetAbbreviatedRest(routeKey) & ")"
-                    If ligne3Text <> "" Then fullVoie = fullVoie & " " & ligne3Text
-                    If ligneText <> "" Then fullVoie = fullVoie & " " & ligneText
-                    If bornes <> "" Then fullVoie = fullVoie & " " & bornes
-                    
-                    currentLetter = Left(UCase$(GetLastWord(routeKey)), 1)
-                    
-                    ligneCount = ligneCount + 1
-                    lignes(ligneCount) = Array(fullVoie, tName, (dictTour.Count > 1), _
-                                              (currentLetter <> prevLetter), lenLast)
-                    prevLetter = currentLetter
-                Next
-            End If
-        Next
-        
-        ' Écrire les lignes dans le tableau de sortie
-        If nbColumns = 1 Then
-            For idx = 1 To ligneCount
-                outputRow = outputRow + 1
-                outputData(outputRow, 1) = lignes(idx)(0)
-                outputData(outputRow, 2) = lignes(idx)(1)
-            Next
-        Else
-            For idx = 1 To ligneCount Step nbColumns
-                outputRow = outputRow + 1
-                For colOff = 0 To nbColumns - 1
-                    If idx + colOff <= ligneCount Then
-                        outputData(outputRow, 1 + 2 * colOff) = lignes(idx + colOff)(0)
-                        outputData(outputRow, 1 + 2 * colOff + 1) = lignes(idx + colOff)(1)
-                    End If
-                Next
-            Next
-        End If
-    Next
-    
-    ' Écrire tout le tableau en une seule fois
-    If outputRow > 0 Then
-        wsOut.Range("A1").Resize(outputRow, totalCols).Value = outputData
-        
-        ' Appliquer le formatage en une seule passe
-        Application.ScreenUpdating = False
-        
-        ' Parcourir et formater
-        currentRow = 1
-        For Each cName In sortedCommunes
-            ' Formater l'en-tête de commune
-            With wsOut.Range("A" & currentRow & ":" & lastCol & currentRow)
-                .Merge
-                If InStr(.Value, "sauf") > 0 Then
-                    .Interior.Color = vbBlue
-                    .Font.Color = vbWhite
-                ElseIf InStr(.Value, "(") > 0 And InStr(.Value, ")") > 0 Then
-                    .Interior.Color = vbYellow
-                Else
-                    .Interior.Color = vbBlack
-                    .Font.Color = vbWhite
-                End If
-                .Font.Bold = True
-                .HorizontalAlignment = xlCenter
-                .VerticalAlignment = xlCenter
-            End With
-            currentRow = currentRow + 1
-            
-            ' Le formatage détaillé des lignes peut être optimisé davantage si nécessaire
-        Next
-        
-        Application.ScreenUpdating = True
-    End If
-End Sub
-
-' === PROCÉDURE PRINCIPALE ===
-
+' === FONCTION PRINCIPALE ULTRA-OPTIMISÉE ===
 Public Sub GenererIndicateurTournées()
+    Dim startTime As Long
+    startTime = GetTickCount
+    
     Dim nbColumns As Long, mode As Long
-    Dim dictCom As Object
     Dim wsOut As Worksheet
     Dim useToutSauf As Boolean
-    Dim i As Long
-
-    ' Demander le nombre de colonnes
+    
+    ' Interface utilisateur
     nbColumns = Application.InputBox( _
         "Nombre de colonnes pour l'affichage ?" & vbCrLf & _
         "(1 = mode simple, 2+ = mode multi-colonnes)", _
@@ -527,7 +50,6 @@ Public Sub GenererIndicateurTournées()
         Exit Sub
     End If
 
-    ' Demander le mode d'affichage
     mode = Application.InputBox( _
         "Mode d'affichage :" & vbCrLf & _
         "1 = Standard (toutes les voies)" & vbCrLf & _
@@ -540,43 +62,501 @@ Public Sub GenererIndicateurTournées()
     End If
     
     useToutSauf = (mode = 2)
-
-    Application.ScreenUpdating = False
-    Application.Calculation = xlCalculationManual
-    Application.EnableEvents = False
-
-    ' Charger les données
-    Set dictCom = LoadTourneeData(ActiveSheet)
-
-    ' Créer la nouvelle feuille
+    
+    ' Optimisations Excel
+    With Application
+        .ScreenUpdating = False
+        .Calculation = xlCalculationManual
+        .EnableEvents = False
+        .DisplayStatusBar = False
+        .PrintCommunication = False
+    End With
+    
+    ' Créer la feuille de sortie
     On Error Resume Next
     Application.DisplayAlerts = False
     Worksheets("indicateur de tg à vérifier").Delete
     Application.DisplayAlerts = True
     On Error GoTo 0
-
+    
     Set wsOut = Worksheets.Add(After:=Sheets(Sheets.Count))
     wsOut.Name = "indicateur de tg à vérifier"
+    
+    ' Traitement principal
+    ProcessDataUltraFast ActiveSheet, wsOut, nbColumns, useToutSauf
+    
+    ' Restaurer Excel
+    With Application
+        .ScreenUpdating = True
+        .Calculation = xlCalculationAutomatic
+        .EnableEvents = True
+        .DisplayStatusBar = True
+        .PrintCommunication = True
+    End With
+    
+    Dim elapsedTime As Long
+    elapsedTime = GetTickCount - startTime
+    
+    MsgBox "Indicateur généré avec " & nbColumns & " colonne(s) dans 'indicateur de tg à vérifier'." & _
+           vbCrLf & "Temps d'exécution : " & Format(elapsedTime / 1000, "0.00") & " secondes", vbInformation
+End Sub
 
-    ' Générer l'indicateur
-    GenerateIndicateurFlexible dictCom, wsOut, nbColumns, useToutSauf
-
-    ' Ajuster les largeurs de colonnes
-    For i = 1 To nbColumns * 2
-        wsOut.Columns(i).AutoFit
+' === TRAITEMENT PRINCIPAL ULTRA-RAPIDE ===
+Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
+                                nbColumns As Long, useToutSauf As Boolean)
+    
+    Dim dataArr As Variant
+    Dim outputArr() As Variant
+    Dim formatArr() As Variant
+    Dim rowCount As Long, colCount As Long
+    Dim i As Long, j As Long, outputRow As Long
+    Dim totalCols As Long
+    
+    ' Charger toutes les données en mémoire
+    dataArr = wsSource.UsedRange.Value
+    rowCount = UBound(dataArr, 1)
+    colCount = UBound(dataArr, 2)
+    
+    ' Identifier les colonnes
+    Dim colMap(1 To 7) As Long
+    For j = 1 To colCount
+        Select Case UCase$(Trim(dataArr(1, j)))
+            Case "COMMUNE":   colMap(1) = j
+            Case "VOIE":      colMap(2) = j
+            Case "NUMÉRO", "NUMERO": colMap(3) = j
+            Case "TOURNÉE", "TOURNEE": colMap(4) = j
+            Case "SÉCABLE", "SECABLE": colMap(5) = j
+            Case "LIGNE":     colMap(6) = j
+            Case "LIGNE 3":   colMap(7) = j
+        End Select
+    Next j
+    
+    If colMap(1) * colMap(2) * colMap(3) * colMap(4) = 0 Then
+        MsgBox "Colonnes obligatoires introuvables", vbCritical
+        Exit Sub
+    End If
+    
+    ' Prétraitement : création d'une structure de données optimisée
+    Dim dataDict As Object
+    Set dataDict = CreateObject("Scripting.Dictionary")
+    
+    ' Parcours unique des données avec construction immédiate
+    Dim commune As String, voie As String, tournee As String, numero As String
+    Dim secable As String, ligne As String, ligne3 As String
+    Dim key As String, subKey As String
+    
+    For i = 2 To rowCount
+        commune = Trim(CStr(dataArr(i, colMap(1))))
+        voie = Trim(CStr(dataArr(i, colMap(2))))
+        numero = Trim(CStr(dataArr(i, colMap(3))))
+        tournee = Trim(CStr(dataArr(i, colMap(4))))
+        
+        If colMap(5) > 0 Then
+            secable = Trim(CStr(dataArr(i, colMap(5))))
+            If Len(secable) > 0 Then tournee = tournee & " (" & secable & ")"
+        End If
+        
+        key = commune & "|" & voie & "|" & tournee
+        
+        If Not dataDict.Exists(key) Then
+            dataDict.Add key, CreateObject("Scripting.Dictionary")
+            dataDict(key)("nums") = CreateObject("Scripting.Dictionary")
+            dataDict(key)("ligne") = ""
+            dataDict(key)("ligne3") = CreateObject("Scripting.Dictionary")
+        End If
+        
+        ' Ajouter le numéro
+        If IsNumeric(numero) Then
+            dataDict(key)("nums")(CLng(numero)) = True
+        End If
+        
+        ' Ligne
+        If colMap(6) > 0 Then
+            ligne = Trim(CStr(dataArr(i, colMap(6))))
+            If Len(ligne) > 0 And dataDict(key)("ligne") = "" Then
+                dataDict(key)("ligne") = ligne
+            End If
+        End If
+        
+        ' Ligne 3
+        If colMap(7) > 0 Then
+            ligne3 = Trim(CStr(dataArr(i, colMap(7))))
+            If Len(ligne3) > 0 Then
+                dataDict(key)("ligne3")(ligne3) = True
+            End If
+        End If
     Next i
     
+    ' Générer la sortie
+    totalCols = nbColumns * 2
+    ReDim outputArr(1 To rowCount, 1 To totalCols)
+    ReDim formatArr(1 To rowCount, 1 To 5) ' Pour stocker les infos de formatage
+    
+    outputRow = 0
+    
+    ' Traitement par commune
+    Dim communes As Object, voies As Object
+    Set communes = CreateObject("Scripting.Dictionary")
+    
+    ' Regrouper par commune
+    For Each key In dataDict.Keys
+        Dim parts() As String
+        parts = Split(key, "|")
+        commune = parts(0)
+        
+        If Not communes.Exists(commune) Then
+            Set communes(commune) = CreateObject("Scripting.Dictionary")
+        End If
+        communes(commune)(key) = True
+    Next
+    
+    ' Générer la sortie optimisée
+    Dim communeKeys As Variant, voieKeys As Variant
+    Dim lastWord As String, prevLetter As String
+    Dim bornes As String, fullText As String
+    
+    communeKeys = communes.Keys
+    communeKeys = QuickSortByLastWordArray(communeKeys)
+    
+    For Each commune In communeKeys
+        outputRow = outputRow + 1
+        
+        ' En-tête de commune
+        outputArr(outputRow, 1) = commune
+        formatArr(outputRow, 1) = 1 ' Type en-tête commune
+        
+        ' Traiter les voies
+        Dim communeData As Object
+        Set communeData = CreateObject("Scripting.Dictionary")
+        
+        For Each key In communes(commune).Keys
+            parts = Split(key, "|")
+            voie = parts(1)
+            tournee = parts(2)
+            
+            If Not communeData.Exists(voie) Then
+                Set communeData(voie) = CreateObject("Scripting.Dictionary")
+            End If
+            communeData(voie)(tournee) = key
+        Next
+        
+        ' Déterminer le mode tout sauf
+        Dim tourneeCount As Object
+        Set tourneeCount = CreateObject("Scripting.Dictionary")
+        Dim allTournees As Object
+        Set allTournees = CreateObject("Scripting.Dictionary")
+        
+        For Each voie In communeData.Keys
+            For Each tournee In communeData(voie).Keys
+                allTournees(tournee) = True
+                If communeData(voie).Count = 1 Then
+                    If Not tourneeCount.Exists(tournee) Then tourneeCount(tournee) = 0
+                    tourneeCount(tournee) = tourneeCount(tournee) + 1
+                End If
+            Next
+        Next
+        
+        ' Modifier l'en-tête si nécessaire
+        If allTournees.Count = 1 Then
+            outputArr(outputRow, 1) = commune & " (" & allTournees.Keys()(0) & ")"
+            formatArr(outputRow, 1) = 2 ' Jaune
+        ElseIf useToutSauf And allTournees.Count <= 4 Then
+            Dim majorityTour As String, maxCount As Long
+            maxCount = 0
+            For Each tournee In tourneeCount.Keys
+                If tourneeCount(tournee) > maxCount Then
+                    maxCount = tourneeCount(tournee)
+                    majorityTour = tournee
+                End If
+            Next
+            If maxCount > 0 Then
+                outputArr(outputRow, 1) = commune & " (" & majorityTour & ") sauf :"
+                formatArr(outputRow, 1) = 3 ' Bleu
+            End If
+        End If
+        
+        ' Traiter les voies
+        voieKeys = communeData.Keys
+        voieKeys = QuickSortByLastWordArray(voieKeys)
+        
+        Dim ligneBuffer() As Variant
+        ReDim ligneBuffer(1 To 1000, 1 To 5)
+        Dim bufferCount As Long
+        bufferCount = 0
+        
+        prevLetter = ""
+        For Each voie In voieKeys
+            For Each tournee In communeData(voie).Keys
+                key = communeData(voie)(tournee)
+                
+                ' Construire le texte
+                lastWord = GetLastWordFast(voie)
+                fullText = UCase$(lastWord) & " (" & GetAbbreviatedFast(voie) & ")"
+                
+                ' Ajouter ligne3
+                If dataDict(key)("ligne3").Count > 0 Then
+                    fullText = fullText & " " & Join(dataDict(key)("ligne3").Keys, " - ") & " -"
+                End If
+                
+                ' Ajouter ligne
+                If dataDict(key)("ligne") <> "" Then
+                    fullText = fullText & " " & dataDict(key)("ligne")
+                End If
+                
+                ' Calculer les bornes si multi-tournées
+                If communeData(voie).Count > 1 Then
+                    bornes = CalculateBornesFast(dataDict(key)("nums"))
+                    If bornes <> "" Then fullText = fullText & " " & bornes
+                End If
+                
+                bufferCount = bufferCount + 1
+                ligneBuffer(bufferCount, 1) = fullText
+                ligneBuffer(bufferCount, 2) = tournee
+                ligneBuffer(bufferCount, 3) = IIf(communeData(voie).Count > 1, 1, 0)
+                ligneBuffer(bufferCount, 4) = IIf(Left(UCase$(lastWord), 1) <> prevLetter, 1, 0)
+                ligneBuffer(bufferCount, 5) = Len(lastWord)
+                
+                prevLetter = Left(UCase$(lastWord), 1)
+            Next
+        Next
+        
+        ' Écrire les lignes dans le tableau de sortie
+        If nbColumns = 1 Then
+            For i = 1 To bufferCount
+                outputRow = outputRow + 1
+                outputArr(outputRow, 1) = ligneBuffer(i, 1)
+                outputArr(outputRow, 2) = ligneBuffer(i, 2)
+                formatArr(outputRow, 1) = 10 + ligneBuffer(i, 3) ' 10=normal, 11=vert
+                formatArr(outputRow, 2) = ligneBuffer(i, 4) ' Nouvelle lettre
+                formatArr(outputRow, 3) = ligneBuffer(i, 5) ' Longueur dernier mot
+            Next
+        Else
+            For i = 1 To bufferCount Step nbColumns
+                outputRow = outputRow + 1
+                For j = 0 To nbColumns - 1
+                    If i + j <= bufferCount Then
+                        outputArr(outputRow, 1 + 2 * j) = ligneBuffer(i + j, 1)
+                        outputArr(outputRow, 1 + 2 * j + 1) = ligneBuffer(i + j, 2)
+                        formatArr(outputRow, 1 + j) = 10 + ligneBuffer(i + j, 3)
+                    End If
+                Next
+            Next
+        End If
+    Next
+    
+    ' Écrire tout en une fois
+    If outputRow > 0 Then
+        wsOut.Range("A1").Resize(outputRow, totalCols).Value = outputArr
+        
+        ' Appliquer le formatage minimal nécessaire
+        ApplyFormattingFast wsOut, formatArr, outputRow, totalCols, nbColumns
+    End If
+End Sub
+
+' === FONCTIONS UTILITAIRES ULTRA-RAPIDES ===
+Private Function GetLastWordFast(ByVal txt As String) As String
+    Dim pos As Long
+    pos = InStrRev(txt, " ")
+    If pos > 0 Then
+        GetLastWordFast = Mid$(txt, pos + 1)
+    Else
+        GetLastWordFast = txt
+    End If
+End Function
+
+Private Function GetAbbreviatedFast(ByVal voie As String) As String
+    Static abbrDict As Object
+    If abbrDict Is Nothing Then
+        Set abbrDict = CreateObject("Scripting.Dictionary")
+        abbrDict("IMPASSE") = "IMP."
+        abbrDict("ROUTE") = "RTE."
+        abbrDict("AVENUE") = "AV."
+        abbrDict("BOULEVARD") = "BD."
+        abbrDict("CHEMIN") = "CH."
+        abbrDict("ALLEE") = "ALL."
+        abbrDict("PLACE") = "PL."
+        abbrDict("SQUARE") = "SQ."
+    End If
+    
+    Dim pos As Long, firstWord As String
+    pos = InStr(voie, " ")
+    If pos > 0 Then
+        firstWord = UCase$(Left$(voie, pos - 1))
+        If abbrDict.Exists(firstWord) Then
+            GetAbbreviatedFast = abbrDict(firstWord) & Mid$(voie, pos, InStrRev(voie, " ") - pos)
+        Else
+            GetAbbreviatedFast = Left$(voie, InStrRev(voie, " ") - 1)
+        End If
+    Else
+        GetAbbreviatedFast = voie
+    End If
+End Function
+
+Private Function CalculateBornesFast(numsDict As Object) As String
+    If numsDict.Count = 0 Then
+        CalculateBornesFast = ""
+        Exit Function
+    End If
+    
+    Dim nums() As Long, i As Long
+    ReDim nums(0 To numsDict.Count - 1)
+    
+    i = 0
+    Dim num As Variant
+    For Each num In numsDict.Keys
+        nums(i) = CLng(num)
+        i = i + 1
+    Next
+    
+    ' Tri rapide inline
+    Dim j As Long, temp As Long
+    For i = 0 To UBound(nums) - 1
+        For j = i + 1 To UBound(nums)
+            If nums(i) > nums(j) Then
+                temp = nums(i)
+                nums(i) = nums(j)
+                nums(j) = temp
+            End If
+        Next
+    Next
+    
+    ' Calcul des bornes
+    Dim oddMin As Long, oddMax As Long, evenMin As Long, evenMax As Long
+    oddMin = 999999: oddMax = -1: evenMin = 999999: evenMax = -1
+    
+    For i = 0 To UBound(nums)
+        If nums(i) Mod 2 = 0 Then
+            If nums(i) < evenMin Then evenMin = nums(i)
+            If nums(i) > evenMax Then evenMax = nums(i)
+        Else
+            If nums(i) < oddMin Then oddMin = nums(i)
+            If nums(i) > oddMax Then oddMax = nums(i)
+        End If
+    Next
+    
+    Dim oddPart As String, evenPart As String
+    
+    If oddMin <= oddMax Then
+        If oddMin = oddMax Then
+            oddPart = CStr(oddMin)
+        Else
+            oddPart = CStr(oddMin) & " à " & CStr(oddMax)
+        End If
+    End If
+    
+    If evenMin <= evenMax Then
+        If evenMin = evenMax Then
+            evenPart = CStr(evenMin)
+        Else
+            evenPart = CStr(evenMin) & " à " & CStr(evenMax)
+        End If
+    End If
+    
+    If oddPart <> "" And evenPart <> "" Then
+        CalculateBornesFast = oddPart & " et " & evenPart
+    ElseIf oddPart <> "" Then
+        CalculateBornesFast = oddPart
+    Else
+        CalculateBornesFast = evenPart
+    End If
+End Function
+
+Private Function QuickSortByLastWordArray(arr As Variant) As Variant
+    Dim temp As Variant, i As Long, j As Long
+    Dim lastWords() As String
+    
+    If Not IsArray(arr) Then
+        QuickSortByLastWordArray = arr
+        Exit Function
+    End If
+    
+    temp = arr
+    ReDim lastWords(LBound(temp) To UBound(temp))
+    
+    ' Précalculer les derniers mots
+    For i = LBound(temp) To UBound(temp)
+        lastWords(i) = UCase$(GetLastWordFast(CStr(temp(i))))
+    Next
+    
+    ' Tri à bulles optimisé
+    For i = LBound(temp) To UBound(temp) - 1
+        For j = i + 1 To UBound(temp)
+            If lastWords(i) > lastWords(j) Then
+                ' Échanger les éléments
+                Dim tempStr As String
+                tempStr = temp(i)
+                temp(i) = temp(j)
+                temp(j) = tempStr
+                
+                tempStr = lastWords(i)
+                lastWords(i) = lastWords(j)
+                lastWords(j) = tempStr
+            End If
+        Next
+    Next
+    
+    QuickSortByLastWordArray = temp
+End Function
+
+Private Sub ApplyFormattingFast(ws As Worksheet, formatArr As Variant, rowCount As Long, _
+                               totalCols As Long, nbColumns As Long)
+    Dim i As Long, rng As Range
+    Dim lastCol As String
+    
+    lastCol = Chr(64 + totalCols)
+    
+    ' Formatage en bloc par type
+    For i = 1 To rowCount
+        Select Case formatArr(i, 1)
+            Case 1 ' En-tête noir
+                Set rng = ws.Range("A" & i & ":" & lastCol & i)
+                With rng
+                    .Merge
+                    .Interior.Color = vbBlack
+                    .Font.Color = vbWhite
+                    .Font.Bold = True
+                    .HorizontalAlignment = xlCenter
+                End With
+                
+            Case 2 ' En-tête jaune
+                Set rng = ws.Range("A" & i & ":" & lastCol & i)
+                With rng
+                    .Merge
+                    .Interior.Color = vbYellow
+                    .Font.Bold = True
+                    .HorizontalAlignment = xlCenter
+                End With
+                
+            Case 3 ' En-tête bleu
+                Set rng = ws.Range("A" & i & ":" & lastCol & i)
+                With rng
+                    .Merge
+                    .Interior.Color = vbBlue
+                    .Font.Color = vbWhite
+                    .Font.Bold = True
+                    .HorizontalAlignment = xlCenter
+                End With
+                
+            Case 10, 11 ' Lignes normales ou vertes
+                If nbColumns = 1 Then
+                    If formatArr(i, 1) = 11 Then
+                        ws.Range("A" & i & ":B" & i).Interior.Color = vbGreen
+                        ws.Range("A" & i & ":B" & i).Font.Color = vbWhite
+                    ElseIf i Mod 2 = 0 Then
+                        ws.Range("A" & i & ":B" & i).Interior.Color = RGB(242, 242, 242)
+                    End If
+                End If
+        End Select
+    Next
+    
+    ' Ajuster les colonnes
+    ws.UsedRange.Columns.AutoFit
+    
     ' Centrer les colonnes de tournées
-    For i = 2 To nbColumns * 2 Step 2
-        wsOut.Columns(i).HorizontalAlignment = xlCenter
-    Next i
-
-    ' Ajouter les bordures
-    wsOut.UsedRange.Borders.LineStyle = xlDash
-
-    Application.ScreenUpdating = True
-    Application.Calculation = xlCalculationAutomatic
-    Application.EnableEvents = True
-
-    MsgBox "Indicateur généré avec " & nbColumns & " colonne(s) dans 'indicateur de tg à vérifier'.", vbInformation
+    For i = 2 To totalCols Step 2
+        ws.Columns(i).HorizontalAlignment = xlCenter
+    Next
+    
+    ' Bordures
+    ws.UsedRange.Borders.LineStyle = xlDash
 End Sub
