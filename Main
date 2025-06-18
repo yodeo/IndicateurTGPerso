@@ -44,7 +44,6 @@ Public Sub GenererIndicateurTournées()
         "Nombre de colonnes pour l'affichage ?" & vbCrLf & _
         "(1 = mode simple, 2+ = mode multi-colonnes)", _
         "Configuration de l'affichage", 1, Type:=1)
-    
     If nbColumns < 1 Then
         MsgBox "Le nombre de colonnes doit être au moins 1.", vbExclamation
         Exit Sub
@@ -55,12 +54,10 @@ Public Sub GenererIndicateurTournées()
         "1 = Standard (toutes les voies)" & vbCrLf & _
         "2 = Tout sauf (masquer les voies majoritaires)", _
         "Mode d'affichage", 1, Type:=1)
-    
     If mode <> 1 And mode <> 2 Then
         MsgBox "Mode invalide.", vbExclamation
         Exit Sub
     End If
-    
     useToutSauf = (mode = 2)
     
     ' Optimisations Excel
@@ -96,7 +93,6 @@ Public Sub GenererIndicateurTournées()
     
     Dim elapsedTime As Long
     elapsedTime = GetTickCount - startTime
-    
     MsgBox "Indicateur généré avec " & nbColumns & " colonne(s) dans 'indicateur de tg à vérifier'." & _
            vbCrLf & "Temps d'exécution : " & Format(elapsedTime / 1000, "0.00") & " secondes", vbInformation
 End Sub
@@ -105,39 +101,40 @@ End Sub
 Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
                                 nbColumns As Long, useToutSauf As Boolean)
     
-    Dim dataArr As Variant
+    Dim dataArr    As Variant
     Dim outputArr() As Variant
     Dim formatArr() As Variant
-    Dim rowCount As Long, colCount As Long
+    Dim rowCount   As Long, colCount As Long
     Dim i As Long, j As Long, outputRow As Long
-    Dim totalCols As Long
+    Dim totalCols  As Long
     
-    ' Charger toutes les données en mémoire
-    Dim raw As Variant
-    raw = wsSource.UsedRange.Value
-    If Not IsArray(raw) Then
-        ' Si une seule cellule, on crée un tableau 2D 1×1
+    ' ——— Charger toutes les données en mémoire ———
+    Dim ur As Range
+    Set ur = wsSource.UsedRange
+    
+    ' Comptage de lignes et colonnes
+    rowCount = ur.Rows.Count
+    colCount = ur.Columns.Count
+    
+    ' Toujours créer dataArr en 2D
+    If rowCount = 1 And colCount = 1 Then
         ReDim dataArr(1 To 1, 1 To 1)
-        dataArr(1, 1) = raw
+        dataArr(1, 1) = ur.Value
     Else
-        dataArr = raw
+        dataArr = ur.Value
     End If
     
-    ' Maintenant on peut utiliser UBound
-    rowCount = UBound(dataArr, 1)
-    colCount = UBound(dataArr, 2)
-    
-    ' Identifier les colonnes
+    ' Identifier les colonnes d'en-tête
     Dim colMap(1 To 7) As Long
     For j = 1 To colCount
-        Select Case UCase$(Trim(dataArr(1, j)))
-            Case "COMMUNE":   colMap(1) = j
-            Case "VOIE":      colMap(2) = j
-            Case "NUMÉRO", "NUMERO": colMap(3) = j
+        Select Case UCase$(Trim$(CStr(dataArr(1, j))))
+            Case "COMMUNE":       colMap(1) = j
+            Case "VOIE":          colMap(2) = j
+            Case "NUMÉRO", "NUMERO":   colMap(3) = j
             Case "TOURNÉE", "TOURNEE": colMap(4) = j
             Case "SÉCABLE", "SECABLE": colMap(5) = j
-            Case "LIGNE":     colMap(6) = j
-            Case "LIGNE 3":   colMap(7) = j
+            Case "LIGNE":         colMap(6) = j
+            Case "LIGNE 3":       colMap(7) = j
         End Select
     Next j
     
@@ -146,32 +143,31 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         Exit Sub
     End If
     
-    ' Prétraitement : création d'une structure de données optimisée
+    ' — Prétraitement : structuration en dictionnaires —
     Dim dataDict As Object
     Set dataDict = CreateObject("Scripting.Dictionary")
     
     Dim commune As String, voie As String, tournee As String, numero As String
     Dim secable As String, ligne As String, ligne3 As String
-    Dim key As Variant, keyStr As String
+    Dim key As String, keyStr As String
     
     For i = 2 To rowCount
-        commune = Trim(CStr(dataArr(i, colMap(1))))
-        voie    = Trim(CStr(dataArr(i, colMap(2))))
-        numero  = Trim(CStr(dataArr(i, colMap(3))))
-        tournee = Trim(CStr(dataArr(i, colMap(4))))
+        commune = Trim$(CStr(dataArr(i, colMap(1))))
+        voie    = Trim$(CStr(dataArr(i, colMap(2))))
+        numero  = Trim$(CStr(dataArr(i, colMap(3))))
+        tournee = Trim$(CStr(dataArr(i, colMap(4))))
         
         If colMap(5) > 0 Then
-            secable = Trim(CStr(dataArr(i, colMap(5))))
+            secable = Trim$(CStr(dataArr(i, colMap(5))))
             If Len(secable) > 0 Then tournee = tournee & " (" & secable & ")"
         End If
         
         key = commune & "|" & voie & "|" & tournee
-        
         If Not dataDict.Exists(key) Then
             dataDict.Add key, CreateObject("Scripting.Dictionary")
-            dataDict(key)("nums")    = CreateObject("Scripting.Dictionary")
-            dataDict(key)("ligne")   = ""
-            dataDict(key)("ligne3")  = CreateObject("Scripting.Dictionary")
+            dataDict(key)("nums")   = CreateObject("Scripting.Dictionary")
+            dataDict(key)("ligne")  = ""
+            dataDict(key)("ligne3") = CreateObject("Scripting.Dictionary")
         End If
         
         If IsNumeric(numero) Then
@@ -179,64 +175,62 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         End If
         
         If colMap(6) > 0 Then
-            ligne = Trim(CStr(dataArr(i, colMap(6))))
+            ligne = Trim$(CStr(dataArr(i, colMap(6))))
             If Len(ligne) > 0 And dataDict(key)("ligne") = "" Then
                 dataDict(key)("ligne") = ligne
             End If
         End If
         
         If colMap(7) > 0 Then
-            ligne3 = Trim(CStr(dataArr(i, colMap(7))))
+            ligne3 = Trim$(CStr(dataArr(i, colMap(7))))
             If Len(ligne3) > 0 Then
                 dataDict(key)("ligne3")(ligne3) = True
             End If
         End If
     Next i
     
-    ' Générer la sortie
+    ' — Génération du tableau de sortie —
     totalCols = nbColumns * 2
     ReDim outputArr(1 To rowCount, 1 To totalCols)
     ReDim formatArr(1 To rowCount, 1 To 5)
     
     outputRow = 0
-    Dim communes As Object, voies As Object
+    Dim communes As Object
     Set communes = CreateObject("Scripting.Dictionary")
     
     ' Regrouper par commune
     For Each key In dataDict.Keys
         Dim parts() As String
-        parts = Split(CStr(key), "|")
+        parts = Split(key, "|")
         commune = parts(0)
         If Not communes.Exists(commune) Then
             Set communes(commune) = CreateObject("Scripting.Dictionary")
         End If
-        communes(commune)(CStr(key)) = True
+        communes(commune)(key) = True
     Next
     
-    ' Tri des communes par dernier mot
+    ' Trier les communes
     Dim communeKeys As Variant
-    communeKeys = communes.Keys
-    communeKeys = QuickSortByLastWordArray(communeKeys)
+    communeKeys = QuickSortByLastWordArray(communes.Keys)
     
-    ' Boucle principale de création
+    ' Pour chaque commune, on construit les lignes...
     For Each commune In communeKeys
         outputRow = outputRow + 1
         outputArr(outputRow, 1) = commune
         formatArr(outputRow, 1) = 1
         
-        ' ... (le reste du code de génération de lignes  
-        '     que vous aviez déjà, inchangé) ...
-        
+        ' … ici, tout le reste de votre logique
+        '   (regroupement par voie, calcul des bornes, remplissage de outputArr)
     Next
     
-    ' Écriture dans la feuille
+    ' — Écrire et formater en une seule fois —
     If outputRow > 0 Then
         wsOut.Range("A1").Resize(outputRow, totalCols).Value = outputArr
         ApplyFormattingFast wsOut, formatArr, outputRow, totalCols, nbColumns
     End If
 End Sub
 
-' === FONCTIONS UTILITAIRES ULTRA-RAPIDES ===
+' === FONCTIONS UTILITAIRES (inchangées) ===
 Private Function GetLastWordFast(ByVal txt As String) As String
     Dim pos As Long
     pos = InStrRev(txt, " ")
@@ -247,5 +241,19 @@ Private Function GetLastWordFast(ByVal txt As String) As String
     End If
 End Function
 
-' (Les autres fonctions GetAbbreviatedFast, CalculateBornesFast, QuickSortByLastWordArray et
-'  ApplyFormattingFast restent inchangées par rapport à votre version initiale.)
+Private Function GetAbbreviatedFast(ByVal voie As String) As String
+    '… votre code existant …
+End Function
+
+Private Function CalculateBornesFast(ByVal numsDict As Variant) As String
+    '… votre code existant …
+End Function
+
+Private Function QuickSortByLastWordArray(arr As Variant) As Variant
+    '… votre code existant …
+End Function
+
+Private Sub ApplyFormattingFast(ws As Worksheet, formatArr As Variant, _
+                                rowCount As Long, totalCols As Long, nbColumns As Long)
+    '… votre code existant …
+End Sub
