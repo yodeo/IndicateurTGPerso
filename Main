@@ -14,8 +14,10 @@ Public g_colLigne3  As Long
 ' === UTILITAIRES ===
 
 Public Function GetLastWord(txt As Variant) As String
-    Dim parts As Variant
+    On Error Resume Next
+    
     Dim trimmedText As String
+    Dim lastSpacePos As Long
     
     ' Gérer les cas où txt est vide ou null
     If IsNull(txt) Or IsEmpty(txt) Then
@@ -23,6 +25,7 @@ Public Function GetLastWord(txt As Variant) As String
         Exit Function
     End If
     
+    ' Convertir en string et trim
     trimmedText = Trim(CStr(txt))
     
     ' Si le texte est vide après trim
@@ -31,14 +34,18 @@ Public Function GetLastWord(txt As Variant) As String
         Exit Function
     End If
     
-    parts = Split(trimmedText, " ")
+    ' Trouver la position du dernier espace
+    lastSpacePos = InStrRev(trimmedText, " ")
     
-    ' Vérifier que le tableau n'est pas vide
-    If UBound(parts) >= 0 Then
-        GetLastWord = parts(UBound(parts))
+    ' Si pas d'espace, retourner tout le texte
+    If lastSpacePos = 0 Then
+        GetLastWord = trimmedText
     Else
-        GetLastWord = ""
+        ' Retourner ce qui suit le dernier espace
+        GetLastWord = Mid(trimmedText, lastSpacePos + 1)
     End If
+    
+    On Error GoTo 0
 End Function
 
 Public Function SortByLastWord(arr As Variant) As Variant
