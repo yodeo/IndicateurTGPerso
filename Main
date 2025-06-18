@@ -63,10 +63,34 @@ Public Function SortByLastWord(arr As Variant) As Variant
 End Function
 
 Public Function GetAbbreviatedRest(vName As Variant) As String
+    On Error Resume Next
     Dim parts As Variant, first As String, abbr As String
     Dim restWords() As String, i As Long
-    parts = Split(Trim(CStr(vName)), " ")
-    If UBound(parts) = 0 Then Exit Function
+    Dim trimmedName As String
+    
+    ' Valeur par défaut
+    GetAbbreviatedRest = ""
+    
+    ' Vérifications de base
+    If IsNull(vName) Or IsEmpty(vName) Then Exit Function
+    
+    trimmedName = Trim(CStr(vName))
+    If trimmedName = "" Then Exit Function
+    
+    parts = Split(trimmedName, " ")
+    
+    ' Vérifier que le tableau n'est pas vide
+    If UBound(parts) < 0 Then
+        GetAbbreviatedRest = trimmedName
+        Exit Function
+    End If
+    
+    ' Si un seul mot, le retourner tel quel
+    If UBound(parts) = 0 Then 
+        GetAbbreviatedRest = trimmedName
+        Exit Function
+    End If
+    
     first = UCase$(parts(0))
     Select Case first
         Case "IMPASSE":   abbr = "IMP."
@@ -79,6 +103,7 @@ Public Function GetAbbreviatedRest(vName As Variant) As String
         Case "SQUARE":    abbr = "SQ."
         Case Else:        abbr = parts(0)
     End Select
+    
     parts(0) = abbr
     ReDim restWords(0 To UBound(parts) - 1)
     For i = 0 To UBound(parts) - 1
