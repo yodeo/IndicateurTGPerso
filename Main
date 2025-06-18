@@ -1,259 +1,293 @@
-Option Explicit
-
-' --- Globals ---
-Public g_wsSrc      As Worksheet
-Public g_dataArr    As Variant
-Public g_colComm    As Long
-Public g_colVoie    As Long
-Public g_colNum     As Long
-Public g_colTour    As Long
-Public g_colSecable As Long
-Public g_colLigne   As Long
-Public g_colLigne3  As Long
-
-' === STRUCTURES DE DONNÉES OPTIMISÉES ===
-Private Type TourneeInfo
-    commune As String
-    voie As String
-    tournee As String
-    nums() As Long
-    numCount As Long
-    ligneText As String
-    ligne3Text As String
-    isMultiTournee As Boolean
-End Type
-
-' === API Windows pour mesurer le temps ===
-#If VBA7 Then
-    Private Declare PtrSafe Function GetTickCount Lib "kernel32" () As Long
-#Else
-    Private Declare Function GetTickCount Lib "kernel32" () As Long
-#End If
-
-' === FONCTION PRINCIPALE ULTRA-OPTIMISÉE ===
-Public Sub GenererIndicateurTournées()
-    Dim startTime As Long
-    startTime = GetTickCount
+Sub CalculerBornes()
+    On Error GoTo ErrorHandler
     
-    Dim nbColumns As Long, mode As Long
-    Dim wsOut As Worksheet
-    Dim useToutSauf As Boolean
+    Dim wsSource As Worksheet
+    Dim wsResult As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim resultRow As Long
     
-    ' Interface utilisateur
-    nbColumns = Application.InputBox( _
-        "Nombre de colonnes pour l'affichage ?" & vbCrLf & _
-        "(1 = mode simple, 2+ = mode multi-colonnes)", _
-        "Configuration de l'affichage", 1, Type:=1)
-    If nbColumns < 1 Then
-        MsgBox "Le nombre de colonnes doit être au moins 1.", vbExclamation
-        Exit Sub
-    End If
-
-    mode = Application.InputBox( _
-        "Mode d'affichage :" & vbCrLf & _
-        "1 = Standard (toutes les voies)" & vbCrLf & _
-        "2 = Tout sauf (masquer les voies majoritaires)", _
-        "Mode d'affichage", 1, Type:=1)
-    If mode <> 1 And mode <> 2 Then
-        MsgBox "Mode invalide.", vbExclamation
-        Exit Sub
-    End If
-    useToutSauf = (mode = 2)
+    ' Collections pour stocker les données groupées
+    Dim dictGroups As Object
+    Set dictGroups = CreateObject("Scripting.Dictionary")
     
-    ' Optimisations Excel
-    With Application
-        .ScreenUpdating = False
-        .Calculation = xlCalculationManual
-        .EnableEvents = False
-        .DisplayStatusBar = False
-        .PrintCommunication = False
-    End With
+    ' Variables pour les données de chaque ligne
+    Dim tournee As String, libelleDistrict As String, ligne3 As String
+    Dim numero As String, motDirecteur As String, voie As String
+    Dim commune As String, secable As String, samedi As String
+    Dim groupKey As String, numeroInt As Long
     
-    ' Créer la feuille de sortie
-    On Error Resume Next
+    ' 1. Identifier la feuille source (première feuille du classeur)
+    Set wsSource = ThisWorkbook.Worksheets(1)
+    
+    ' 2. Supprimer la feuille "Calcul des bornes" si elle existe
     Application.DisplayAlerts = False
-    Worksheets("indicateur de tg à vérifier").Delete
+    On Error Resume Next
+    ThisWorkbook.Worksheets("Calcul des bornes").Delete
+    On Error GoTo ErrorHandler
     Application.DisplayAlerts = True
-    On Error GoTo 0
     
-    Set wsOut = Worksheets.Add(After:=Sheets(Sheets.Count))
-    wsOut.Name = "indicateur de tg à vérifier"
+    ' 3. Créer la nouvelle feuille "Calcul des bornes"
+    Set wsResult = ThisWorkbook.Worksheets.Add
+    wsResult.Name = "Calcul des bornes"
     
-    ' Traitement principal
-    ProcessDataUltraFast ActiveSheet, wsOut, nbColumns, useToutSauf
-    
-    ' Restaurer Excel
-    With Application
-        .ScreenUpdating = True
-        .Calculation = xlCalculationAutomatic
-        .EnableEvents = True
-        .DisplayStatusBar = True
-        .PrintCommunication = True
+    ' 4. Créer les en-têtes
+    With wsResult
+        .Cells(1, 1).Value = "Commune"
+        .Cells(1, 2).Value = "Mot directeur"
+        .Cells(1, 3).Value = "Libelle de voie"
+        .Cells(1, 4).Value = "Ligne 3"
+        .Cells(1, 5).Value = "Numéro de voie (borne)"
+        .Cells(1, 6).Value = "Libelle District"
+        .Cells(1, 7).Value = "Tournée"
+        .Cells(1, 8).Value = "Sécable"
+        .Cells(1, 9).Value = "Samedi"
+        
+        ' Formatage des en-têtes
+        .Range("A1:I1").Font.Bold = True
+        .Range("A1:I1").Interior.Color = RGB(220, 220, 220)
     End With
     
-    Dim elapsedTime As Long
-    elapsedTime = GetTickCount - startTime
-    MsgBox "Indicateur généré avec " & nbColumns & " colonne(s) dans 'indicateur de tg à vérifier'." & _
-           vbCrLf & "Temps d'exécution : " & Format(elapsedTime / 1000, "0.00") & " secondes", vbInformation
-End Sub
-
-' === TRAITEMENT PRINCIPAL ULTRA-RAPIDE ===
-Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
-                                nbColumns As Long, useToutSauf As Boolean)
+    ' 5. Lire les données et les regrouper
+    lastRow = wsSource.Cells(wsSource.Rows.Count, "A").End(xlUp).Row
     
-    Dim dataArr    As Variant
-    Dim outputArr() As Variant
-    Dim formatArr() As Variant
-    Dim rowCount   As Long, colCount As Long
-    Dim i As Long, j As Long, outputRow As Long
-    Dim totalCols  As Long
-    
-    ' ——— Charger toutes les données en mémoire ———
-    Dim ur As Range
-    Set ur = wsSource.UsedRange
-    
-    ' Comptage de lignes et colonnes
-    rowCount = ur.Rows.Count
-    colCount = ur.Columns.Count
-    
-    ' Toujours créer dataArr en 2D
-    If rowCount = 1 And colCount = 1 Then
-        ReDim dataArr(1 To 1, 1 To 1)
-        dataArr(1, 1) = ur.Value
-    Else
-        dataArr = ur.Value
-    End If
-    
-    ' Identifier les colonnes d'en-tête
-    Dim colMap(1 To 7) As Long
-    For j = 1 To colCount
-        Select Case UCase$(Trim$(CStr(dataArr(1, j))))
-            Case "COMMUNE":       colMap(1) = j
-            Case "VOIE":          colMap(2) = j
-            Case "NUMÉRO", "NUMERO":   colMap(3) = j
-            Case "TOURNÉE", "TOURNEE": colMap(4) = j
-            Case "SÉCABLE", "SECABLE": colMap(5) = j
-            Case "LIGNE":         colMap(6) = j
-            Case "LIGNE 3":       colMap(7) = j
-        End Select
-    Next j
-    
-    If colMap(1) * colMap(2) * colMap(3) * colMap(4) = 0 Then
-        MsgBox "Colonnes obligatoires introuvables", vbCritical
-        Exit Sub
-    End If
-    
-    ' — Prétraitement : structuration en dictionnaires —
-    Dim dataDict As Object
-    Set dataDict = CreateObject("Scripting.Dictionary")
-    
-    Dim commune As String, voie As String, tournee As String, numero As String
-    Dim secable As String, ligne As String, ligne3 As String
-    Dim key As String, keyStr As String
-    
-    For i = 2 To rowCount
-        commune = Trim$(CStr(dataArr(i, colMap(1))))
-        voie    = Trim$(CStr(dataArr(i, colMap(2))))
-        numero  = Trim$(CStr(dataArr(i, colMap(3))))
-        tournee = Trim$(CStr(dataArr(i, colMap(4))))
+    For i = 2 To lastRow ' Commencer à la ligne 2 (après les en-têtes)
+        ' Lire les données de la ligne courante
+        tournee = Trim(CStr(wsSource.Cells(i, 1).Value))
+        libelleDistrict = Trim(CStr(wsSource.Cells(i, 2).Value))
+        ligne3 = Trim(CStr(wsSource.Cells(i, 3).Value))
+        numero = Trim(CStr(wsSource.Cells(i, 4).Value))
+        motDirecteur = Trim(CStr(wsSource.Cells(i, 5).Value))
+        voie = Trim(CStr(wsSource.Cells(i, 6).Value))
+        commune = Trim(CStr(wsSource.Cells(i, 7).Value))
+        secable = Trim(CStr(wsSource.Cells(i, 8).Value))
+        samedi = Trim(CStr(wsSource.Cells(i, 9).Value))
         
-        If colMap(5) > 0 Then
-            secable = Trim$(CStr(dataArr(i, colMap(5))))
-            If Len(secable) > 0 Then tournee = tournee & " (" & secable & ")"
-        End If
-        
-        key = commune & "|" & voie & "|" & tournee
-        If Not dataDict.Exists(key) Then
-            dataDict.Add key, CreateObject("Scripting.Dictionary")
-            dataDict(key)("nums")   = CreateObject("Scripting.Dictionary")
-            dataDict(key)("ligne")  = ""
-            dataDict(key)("ligne3") = CreateObject("Scripting.Dictionary")
-        End If
-        
-        If IsNumeric(numero) Then
-            dataDict(key)("nums")(CLng(numero)) = True
-        End If
-        
-        If colMap(6) > 0 Then
-            ligne = Trim$(CStr(dataArr(i, colMap(6))))
-            If Len(ligne) > 0 And dataDict(key)("ligne") = "" Then
-                dataDict(key)("ligne") = ligne
+        ' Ignorer les lignes avec numéro vide ou non numérique
+        If numero <> "" And IsNumeric(numero) Then
+            numeroInt = CLng(numero)
+            
+            ' Clé de regroupement : Commune + Mot Directeur + Voie
+            groupKey = commune & "|" & motDirecteur & "|" & voie
+            
+            ' Initialiser le groupe s'il n'existe pas
+            If Not dictGroups.Exists(groupKey) Then
+                Set dictGroups(groupKey) = CreateObject("Scripting.Dictionary")
+                dictGroups(groupKey)("commune") = commune
+                dictGroups(groupKey)("motDirecteur") = motDirecteur
+                dictGroups(groupKey)("voie") = voie
+                dictGroups(groupKey)("ligne3") = ligne3
+                dictGroups(groupKey)("libelleDistrict") = libelleDistrict
+                Set dictGroups(groupKey)("adresses") = CreateObject("Scripting.Dictionary")
             End If
-        End If
-        
-        If colMap(7) > 0 Then
-            ligne3 = Trim$(CStr(dataArr(i, colMap(7))))
-            If Len(ligne3) > 0 Then
-                dataDict(key)("ligne3")(ligne3) = True
+            
+            ' Ajouter l'adresse au groupe
+            Dim adresseKey As String
+            adresseKey = tournee & "|" & secable & "|" & samedi & "|" & CStr(numeroInt)
+            
+            If Not dictGroups(groupKey)("adresses").Exists(adresseKey) Then
+                Set dictGroups(groupKey)("adresses")(adresseKey) = CreateObject("Scripting.Dictionary")
+                dictGroups(groupKey)("adresses")(adresseKey)("tournee") = tournee
+                dictGroups(groupKey)("adresses")(adresseKey)("secable") = secable
+                dictGroups(groupKey)("adresses")(adresseKey)("samedi") = samedi
+                dictGroups(groupKey)("adresses")(adresseKey)("numero") = numeroInt
             End If
         End If
     Next i
     
-    ' — Génération du tableau de sortie —
-    totalCols = nbColumns * 2
-    ReDim outputArr(1 To rowCount, 1 To totalCols)
-    ReDim formatArr(1 To rowCount, 1 To 5)
+    ' 6. Traiter chaque groupe
+    resultRow = 2
+    Dim groupKeys As Variant
+    groupKeys = dictGroups.Keys
     
-    outputRow = 0
-    Dim communes As Object
-    Set communes = CreateObject("Scripting.Dictionary")
-    
-    ' Regrouper par commune
-    For Each key In dataDict.Keys
-        Dim parts() As String
-        parts = Split(key, "|")
-        commune = parts(0)
-        If Not communes.Exists(commune) Then
-            Set communes(commune) = CreateObject("Scripting.Dictionary")
-        End If
-        communes(commune)(key) = True
-    Next
-    
-    ' Trier les communes
-    Dim communeKeys As Variant
-    communeKeys = QuickSortByLastWordArray(communes.Keys)
-    
-    ' Pour chaque commune, on construit les lignes...
-    For Each commune In communeKeys
-        outputRow = outputRow + 1
-        outputArr(outputRow, 1) = commune
-        formatArr(outputRow, 1) = 1
+    For i = 0 To UBound(groupKeys)
+        Dim currentGroup As Object
+        Set currentGroup = dictGroups(groupKeys(i))
         
-        ' … ici, tout le reste de votre logique
-        '   (regroupement par voie, calcul des bornes, remplissage de outputArr)
-    Next
+        ' Vérifier si la voie est complète
+        If EstVoieComplete(currentGroup("adresses")) Then
+            ' Voie complète : une seule ligne sans borne
+            Dim premierAdresse As Object
+            Set premierAdresse = currentGroup("adresses")(currentGroup("adresses").Keys()(0))
+            
+            EcrireLigneResultat wsResult, resultRow, _
+                currentGroup("commune"), currentGroup("motDirecteur"), _
+                currentGroup("voie"), currentGroup("ligne3"), "", _
+                currentGroup("libelleDistrict"), premierAdresse("tournee"), _
+                premierAdresse("secable"), premierAdresse("samedi")
+            resultRow = resultRow + 1
+        Else
+            ' Voie non complète : calculer les bornes
+            CalculerEtEcrireBornes currentGroup, wsResult, resultRow
+        End If
+    Next i
     
-    ' — Écrire et formater en une seule fois —
-    If outputRow > 0 Then
-        wsOut.Range("A1").Resize(outputRow, totalCols).Value = outputArr
-        ApplyFormattingFast wsOut, formatArr, outputRow, totalCols, nbColumns
-    End If
+    ' 7. Ajuster la largeur des colonnes
+    wsResult.Columns("A:I").AutoFit
+    
+    MsgBox "Calcul des bornes terminé. " & (resultRow - 2) & " lignes générées.", vbInformation
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "Erreur : " & Err.Description, vbCritical
 End Sub
 
-' === FONCTIONS UTILITAIRES (inchangées) ===
-Private Function GetLastWordFast(ByVal txt As String) As String
-    Dim pos As Long
-    pos = InStrRev(txt, " ")
-    If pos > 0 Then
-        GetLastWordFast = Mid$(txt, pos + 1)
+' Fonction pour vérifier si une voie est complète
+Private Function EstVoieComplete(adresses As Object) As Boolean
+    Dim keys As Variant
+    keys = adresses.Keys
+    
+    If UBound(keys) < 0 Then
+        EstVoieComplete = True
+        Exit Function
+    End If
+    
+    ' Obtenir les valeurs de référence (première adresse)
+    Dim refTournee As String, refSecable As String, refSamedi As String
+    Dim premierAdresse As Object
+    Set premierAdresse = adresses(keys(0))
+    refTournee = premierAdresse("tournee")
+    refSecable = premierAdresse("secable")
+    refSamedi = premierAdresse("samedi")
+    
+    ' Vérifier que toutes les adresses ont les mêmes valeurs
+    Dim j As Long
+    For j = 0 To UBound(keys)
+        Dim currentAdresse As Object
+        Set currentAdresse = adresses(keys(j))
+        
+        If currentAdresse("tournee") <> refTournee Or _
+           currentAdresse("secable") <> refSecable Or _
+           currentAdresse("samedi") <> refSamedi Then
+            EstVoieComplete = False
+            Exit Function
+        End If
+    Next j
+    
+    EstVoieComplete = True
+End Function
+
+' Subroutine pour calculer et écrire les bornes
+Private Sub CalculerEtEcrireBornes(currentGroup As Object, wsResult As Worksheet, ByRef resultRow As Long)
+    ' Regrouper par Tournée + Sécable + Samedi
+    Dim dictSubGroups As Object
+    Set dictSubGroups = CreateObject("Scripting.Dictionary")
+    
+    Dim adresseKeys As Variant
+    adresseKeys = currentGroup("adresses").Keys
+    
+    Dim j As Long
+    For j = 0 To UBound(adresseKeys)
+        Dim currentAdresse As Object
+        Set currentAdresse = currentGroup("adresses")(adresseKeys(j))
+        
+        Dim subGroupKey As String
+        subGroupKey = currentAdresse("tournee") & "|" & currentAdresse("secable") & "|" & currentAdresse("samedi")
+        
+        If Not dictSubGroups.Exists(subGroupKey) Then
+            Set dictSubGroups(subGroupKey) = CreateObject("Scripting.Dictionary")
+            dictSubGroups(subGroupKey)("tournee") = currentAdresse("tournee")
+            dictSubGroups(subGroupKey)("secable") = currentAdresse("secable")
+            dictSubGroups(subGroupKey)("samedi") = currentAdresse("samedi")
+            dictSubGroups(subGroupKey)("pairs") = New Collection
+            dictSubGroups(subGroupKey)("impairs") = New Collection
+        End If
+        
+        ' Séparer pairs et impairs
+        If currentAdresse("numero") Mod 2 = 0 Then
+            dictSubGroups(subGroupKey)("pairs").Add currentAdresse("numero")
+        Else
+            dictSubGroups(subGroupKey)("impairs").Add currentAdresse("numero")
+        End If
+    Next j
+    
+    ' Écrire les bornes pour chaque sous-groupe
+    Dim subGroupKeys As Variant
+    subGroupKeys = dictSubGroups.Keys
+    
+    For j = 0 To UBound(subGroupKeys)
+        Dim currentSubGroup As Object
+        Set currentSubGroup = dictSubGroups(subGroupKeys(j))
+        
+        ' Traiter les pairs
+        If currentSubGroup("pairs").Count > 0 Then
+            Dim bornePairs As String
+            bornePairs = CalculerBorne(currentSubGroup("pairs"))
+            
+            EcrireLigneResultat wsResult, resultRow, _
+                currentGroup("commune"), currentGroup("motDirecteur"), _
+                currentGroup("voie"), currentGroup("ligne3"), bornePairs, _
+                currentGroup("libelleDistrict"), currentSubGroup("tournee"), _
+                currentSubGroup("secable"), currentSubGroup("samedi")
+            resultRow = resultRow + 1
+        End If
+        
+        ' Traiter les impairs
+        If currentSubGroup("impairs").Count > 0 Then
+            Dim borneImpairs As String
+            borneImpairs = CalculerBorne(currentSubGroup("impairs"))
+            
+            EcrireLigneResultat wsResult, resultRow, _
+                currentGroup("commune"), currentGroup("motDirecteur"), _
+                currentGroup("voie"), currentGroup("ligne3"), borneImpairs, _
+                currentGroup("libelleDistrict"), currentSubGroup("tournee"), _
+                currentSubGroup("secable"), currentSubGroup("samedi")
+            resultRow = resultRow + 1
+        End If
+    Next j
+End Sub
+
+' Fonction pour calculer une borne à partir d'une collection de numéros
+Private Function CalculerBorne(numeros As Collection) As String
+    If numeros.Count = 0 Then
+        CalculerBorne = ""
+        Exit Function
+    End If
+    
+    ' Convertir en tableau et trier
+    Dim arr() As Long
+    ReDim arr(1 To numeros.Count)
+    
+    Dim i As Long
+    For i = 1 To numeros.Count
+        arr(i) = numeros(i)
+    Next i
+    
+    ' Tri simple (bulle sort)
+    Dim j As Long, temp As Long
+    For i = 1 To UBound(arr) - 1
+        For j = i + 1 To UBound(arr)
+            If arr(i) > arr(j) Then
+                temp = arr(i)
+                arr(i) = arr(j)
+                arr(j) = temp
+            End If
+        Next j
+    Next i
+    
+    ' Retourner la borne formatée
+    If UBound(arr) = 1 Then
+        CalculerBorne = CStr(arr(1))
     Else
-        GetLastWordFast = txt
+        CalculerBorne = CStr(arr(1)) & " → " & CStr(arr(UBound(arr)))
     End If
 End Function
 
-Private Function GetAbbreviatedFast(ByVal voie As String) As String
-    '… votre code existant …
-End Function
-
-Private Function CalculateBornesFast(ByVal numsDict As Variant) As String
-    '… votre code existant …
-End Function
-
-Private Function QuickSortByLastWordArray(arr As Variant) As Variant
-    '… votre code existant …
-End Function
-
-Private Sub ApplyFormattingFast(ws As Worksheet, formatArr As Variant, _
-                                rowCount As Long, totalCols As Long, nbColumns As Long)
-    '… votre code existant …
+' Subroutine pour écrire une ligne de résultat
+Private Sub EcrireLigneResultat(ws As Worksheet, row As Long, _
+    commune As String, motDirecteur As String, voie As String, _
+    ligne3 As String, borne As String, libelleDistrict As String, _
+    tournee As String, secable As String, samedi As String)
+    
+    With ws
+        .Cells(row, 1).Value = commune
+        .Cells(row, 2).Value = motDirecteur
+        .Cells(row, 3).Value = voie
+        .Cells(row, 4).Value = ligne3
+        .Cells(row, 5).Value = borne
+        .Cells(row, 6).Value = libelleDistrict
+        .Cells(row, 7).Value = tournee
+        .Cells(row, 8).Value = secable
+        .Cells(row, 9).Value = samedi
+    End With
 End Sub
