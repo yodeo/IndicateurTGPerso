@@ -313,7 +313,9 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
                 
                 ' Calculer les bornes si multi-tournées
                 If communeData(voie).Count > 1 Then
-                    bornes = CalculateBornesFast(dataDict(keyStr)("nums"))
+                    Dim numsDictTemp As Object
+                    Set numsDictTemp = dataDict(keyStr)("nums")
+                    bornes = CalculateBornesFast(numsDictTemp)
                     If bornes <> "" Then fullText = fullText & " " & bornes
                 End If
                 
@@ -400,7 +402,12 @@ Private Function GetAbbreviatedFast(ByVal voie As String) As String
     End If
 End Function
 
-Private Function CalculateBornesFast(numsDict As Object) As String
+Private Function CalculateBornesFast(ByVal numsDict As Variant) As String
+    If Not IsObject(numsDict) Then
+        CalculateBornesFast = ""
+        Exit Function
+    End If
+    
     If numsDict.Count = 0 Then
         CalculateBornesFast = ""
         Exit Function
