@@ -53,15 +53,15 @@ Sub CalculerBornes()
     
     For i = 2 To lastRow ' Commencer à la ligne 2 (après les en-têtes)
         ' Lire les données de la ligne courante
-        tournee = Trim(CStr(wsSource.Cells(i, 1).Value))
-        libelleDistrict = Trim(CStr(wsSource.Cells(i, 2).Value))
-        ligne3 = Trim(CStr(wsSource.Cells(i, 3).Value))
-        numero = Trim(CStr(wsSource.Cells(i, 4).Value))
-        motDirecteur = Trim(CStr(wsSource.Cells(i, 5).Value))
-        voie = Trim(CStr(wsSource.Cells(i, 6).Value))
-        commune = Trim(CStr(wsSource.Cells(i, 7).Value))
-        secable = Trim(CStr(wsSource.Cells(i, 8).Value))
-        samedi = Trim(CStr(wsSource.Cells(i, 9).Value))
+        tournee = NullToEmpty(wsSource.Cells(i, 1).Value)
+        libelleDistrict = NullToEmpty(wsSource.Cells(i, 2).Value)
+        ligne3 = NullToEmpty(wsSource.Cells(i, 3).Value)
+        numero = NullToEmpty(wsSource.Cells(i, 4).Value)
+        motDirecteur = NullToEmpty(wsSource.Cells(i, 5).Value)
+        voie = NullToEmpty(wsSource.Cells(i, 6).Value)
+        commune = NullToEmpty(wsSource.Cells(i, 7).Value)
+        secable = NullToEmpty(wsSource.Cells(i, 8).Value)
+        samedi = NullToEmpty(wsSource.Cells(i, 9).Value)
         
         ' Ignorer les lignes avec numéro vide ou non numérique
         If numero <> "" And IsNumeric(numero) Then
@@ -72,13 +72,15 @@ Sub CalculerBornes()
             
             ' Initialiser le groupe s'il n'existe pas
             If Not dictGroups.Exists(groupKey) Then
-                Set dictGroups(groupKey) = CreateObject("Scripting.Dictionary")
-                dictGroups(groupKey)("commune") = commune
-                dictGroups(groupKey)("motDirecteur") = motDirecteur
-                dictGroups(groupKey)("voie") = voie
-                dictGroups(groupKey)("ligne3") = ligne3
-                dictGroups(groupKey)("libelleDistrict") = libelleDistrict
-                Set dictGroups(groupKey)("adresses") = CreateObject("Scripting.Dictionary")
+                Dim newGroup As Object
+                Set newGroup = CreateObject("Scripting.Dictionary")
+                newGroup("commune") = commune
+                newGroup("motDirecteur") = motDirecteur
+                newGroup("voie") = voie
+                newGroup("ligne3") = ligne3
+                newGroup("libelleDistrict") = libelleDistrict
+                Set newGroup("adresses") = CreateObject("Scripting.Dictionary")
+                Set dictGroups(groupKey) = newGroup
             End If
             
             ' Ajouter l'adresse au groupe
@@ -86,11 +88,13 @@ Sub CalculerBornes()
             adresseKey = tournee & "|" & secable & "|" & samedi & "|" & CStr(numeroInt)
             
             If Not dictGroups(groupKey)("adresses").Exists(adresseKey) Then
-                Set dictGroups(groupKey)("adresses")(adresseKey) = CreateObject("Scripting.Dictionary")
-                dictGroups(groupKey)("adresses")(adresseKey)("tournee") = tournee
-                dictGroups(groupKey)("adresses")(adresseKey)("secable") = secable
-                dictGroups(groupKey)("adresses")(adresseKey)("samedi") = samedi
-                dictGroups(groupKey)("adresses")(adresseKey)("numero") = numeroInt
+                Dim newAdresse As Object
+                Set newAdresse = CreateObject("Scripting.Dictionary")
+                newAdresse("tournee") = tournee
+                newAdresse("secable") = secable
+                newAdresse("samedi") = samedi
+                newAdresse("numero") = numeroInt
+                Set dictGroups(groupKey)("adresses")(adresseKey) = newAdresse
             End If
         End If
     Next i
@@ -100,15 +104,18 @@ Sub CalculerBornes()
     Dim groupKeys As Variant
     groupKeys = dictGroups.Keys
     
-    For i = 0 To UBound(groupKeys)
+    Dim j As Long
+    For j = 0 To UBound(groupKeys)
         Dim currentGroup As Object
-        Set currentGroup = dictGroups(groupKeys(i))
+        Set currentGroup = dictGroups(groupKeys(j))
         
         ' Vérifier si la voie est complète
         If EstVoieComplete(currentGroup("adresses")) Then
             ' Voie complète : une seule ligne sans borne
+            Dim adresseKeys As Variant
+            adresseKeys = currentGroup("adresses").Keys
             Dim premierAdresse As Object
-            Set premierAdresse = currentGroup("adresses")(currentGroup("adresses").Keys()(0))
+            Set premierAdresse = currentGroup("adresses")(adresseKeys(0))
             
             EcrireLigneResultat wsResult, resultRow, _
                 currentGroup("commune"), currentGroup("motDirecteur"), _
@@ -120,7 +127,7 @@ Sub CalculerBornes()
             ' Voie non complète : calculer les bornes
             CalculerEtEcrireBornes currentGroup, wsResult, resultRow
         End If
-    Next i
+    Next j
     
     ' 7. Ajuster la largeur des colonnes
     wsResult.Columns("A:I").AutoFit
@@ -129,8 +136,17 @@ Sub CalculerBornes()
     Exit Sub
     
 ErrorHandler:
-    MsgBox "Erreur : " & Err.Description, vbCritical
+    MsgBox "Erreur ligne " & i & " : " & Err.Description, vbCritical
 End Sub
+
+' Fonction utilitaire pour gérer les valeurs null
+Private Function NullToEmpty(value As Variant) As String
+    If IsNull(value) Or IsEmpty(value) Then
+        NullToEmpty = ""
+    Else
+        NullToEmpty = Trim(CStr(value))
+    End If
+End Function
 
 ' Fonction pour vérifier si une voie est complète
 Private Function EstVoieComplete(adresses As Object) As Boolean
@@ -185,19 +201,29 @@ Private Sub CalculerEtEcrireBornes(currentGroup As Object, wsResult As Worksheet
         subGroupKey = currentAdresse("tournee") & "|" & currentAdresse("secable") & "|" & currentAdresse("samedi")
         
         If Not dictSubGroups.Exists(subGroupKey) Then
-            Set dictSubGroups(subGroupKey) = CreateObject("Scripting.Dictionary")
-            dictSubGroups(subGroupKey)("tournee") = currentAdresse("tournee")
-            dictSubGroups(subGroupKey)("secable") = currentAdresse("secable")
-            dictSubGroups(subGroupKey)("samedi") = currentAdresse("samedi")
-            dictSubGroups(subGroupKey)("pairs") = New Collection
-            dictSubGroups(subGroupKey)("impairs") = New Collection
+            Dim newSubGroup As Object
+            Set newSubGroup = CreateObject("Scripting.Dictionary")
+            newSubGroup("tournee") = currentAdresse("tournee")
+            newSubGroup("secable") = currentAdresse("secable")
+            newSubGroup("samedi") = currentAdresse("samedi")
+            newSubGroup("pairs") = ""
+            newSubGroup("impairs") = ""
+            Set dictSubGroups(subGroupKey) = newSubGroup
         End If
         
-        ' Séparer pairs et impairs
+        ' Séparer pairs et impairs (utiliser des chaînes de caractères)
         If currentAdresse("numero") Mod 2 = 0 Then
-            dictSubGroups(subGroupKey)("pairs").Add currentAdresse("numero")
+            If dictSubGroups(subGroupKey)("pairs") = "" Then
+                dictSubGroups(subGroupKey)("pairs") = CStr(currentAdresse("numero"))
+            Else
+                dictSubGroups(subGroupKey)("pairs") = dictSubGroups(subGroupKey)("pairs") & "," & CStr(currentAdresse("numero"))
+            End If
         Else
-            dictSubGroups(subGroupKey)("impairs").Add currentAdresse("numero")
+            If dictSubGroups(subGroupKey)("impairs") = "" Then
+                dictSubGroups(subGroupKey)("impairs") = CStr(currentAdresse("numero"))
+            Else
+                dictSubGroups(subGroupKey)("impairs") = dictSubGroups(subGroupKey)("impairs") & "," & CStr(currentAdresse("numero"))
+            End If
         End If
     Next j
     
@@ -210,9 +236,9 @@ Private Sub CalculerEtEcrireBornes(currentGroup As Object, wsResult As Worksheet
         Set currentSubGroup = dictSubGroups(subGroupKeys(j))
         
         ' Traiter les pairs
-        If currentSubGroup("pairs").Count > 0 Then
+        If currentSubGroup("pairs") <> "" Then
             Dim bornePairs As String
-            bornePairs = CalculerBorne(currentSubGroup("pairs"))
+            bornePairs = CalculerBorneDepuisChaine(currentSubGroup("pairs"))
             
             EcrireLigneResultat wsResult, resultRow, _
                 currentGroup("commune"), currentGroup("motDirecteur"), _
@@ -223,9 +249,9 @@ Private Sub CalculerEtEcrireBornes(currentGroup As Object, wsResult As Worksheet
         End If
         
         ' Traiter les impairs
-        If currentSubGroup("impairs").Count > 0 Then
+        If currentSubGroup("impairs") <> "" Then
             Dim borneImpairs As String
-            borneImpairs = CalculerBorne(currentSubGroup("impairs"))
+            borneImpairs = CalculerBorneDepuisChaine(currentSubGroup("impairs"))
             
             EcrireLigneResultat wsResult, resultRow, _
                 currentGroup("commune"), currentGroup("motDirecteur"), _
@@ -237,39 +263,44 @@ Private Sub CalculerEtEcrireBornes(currentGroup As Object, wsResult As Worksheet
     Next j
 End Sub
 
-' Fonction pour calculer une borne à partir d'une collection de numéros
-Private Function CalculerBorne(numeros As Collection) As String
-    If numeros.Count = 0 Then
-        CalculerBorne = ""
+' Fonction pour calculer une borne à partir d'une chaîne de numéros séparés par des virgules
+Private Function CalculerBorneDepuisChaine(numerosStr As String) As String
+    If numerosStr = "" Then
+        CalculerBorneDepuisChaine = ""
         Exit Function
     End If
     
-    ' Convertir en tableau et trier
-    Dim arr() As Long
-    ReDim arr(1 To numeros.Count)
+    ' Séparer la chaîne et convertir en tableau
+    Dim numerosArray As Variant
+    numerosArray = Split(numerosStr, ",")
     
-    Dim i As Long
-    For i = 1 To numeros.Count
-        arr(i) = numeros(i)
+    Dim i As Long, j As Long
+    Dim temp As Long
+    
+    ' Convertir en tableau de Long et trier
+    Dim numArray() As Long
+    ReDim numArray(0 To UBound(numerosArray))
+    
+    For i = 0 To UBound(numerosArray)
+        numArray(i) = CLng(numerosArray(i))
     Next i
     
     ' Tri simple (bulle sort)
-    Dim j As Long, temp As Long
-    For i = 1 To UBound(arr) - 1
-        For j = i + 1 To UBound(arr)
-            If arr(i) > arr(j) Then
-                temp = arr(i)
-                arr(i) = arr(j)
-                arr(j) = temp
+    For i = 0 To UBound(numArray) - 1
+        For j = i + 1 To UBound(numArray)
+            If numArray(i) > numArray(j) Then
+                temp = numArray(i)
+                numArray(i) = numArray(j)
+                numArray(j) = temp
             End If
         Next j
     Next i
     
     ' Retourner la borne formatée
-    If UBound(arr) = 1 Then
-        CalculerBorne = CStr(arr(1))
+    If UBound(numArray) = 0 Then
+        CalculerBorneDepuisChaine = CStr(numArray(0))
     Else
-        CalculerBorne = CStr(arr(1)) & " → " & CStr(arr(UBound(arr)))
+        CalculerBorneDepuisChaine = CStr(numArray(0)) & " → " & CStr(numArray(UBound(numArray)))
     End If
 End Function
 
