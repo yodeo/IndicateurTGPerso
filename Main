@@ -1,4 +1,3 @@
-' === MODULE : IndicateurTournées.bas ===
 Option Explicit
 
 ' --- Globals ---
@@ -121,6 +120,7 @@ Public Function GetLigne3Text(ByVal cName As Variant, _
         GetLigne3Text = ""
     End If
 End Function
+
 ' === CHARGEMENT DES DONNÉES ===
 
 Public Function LoadTourneeData(ws As Worksheet) As Object
@@ -190,21 +190,33 @@ Public Function LoadTourneeData(ws As Worksheet) As Object
 
     Set LoadTourneeData = dictCom
 End Function
-Public Sub GenerateCourrierStandard(dictCom As Object, wsOut As Worksheet)
+
+' === GÉNÉRATION UNIFIÉE ===
+
+Public Sub GenerateIndicateurFlexible(dictCom As Object, wsOut As Worksheet, _
+                                     nbColumns As Long, useToutSauf As Boolean)
     Dim cName As Variant, dictVoie As Object, dictTour As Object
-    Dim dictAllTours As Object, onlyTours As Variant
+    Dim dictAllTours As Object, countPerTour As Object, onlyTours As Variant
+    Dim majorityTour As String, maxCount As Long, shouldUseToutSauf As Boolean
     Dim routeKey As Variant, tName As Variant, keyNum As Variant
     Dim currentRow As Long, prevLetter As String, currentLetter As String
     Dim oddMin As Long, oddMax As Long, evenMin As Long, evenMax As Long
     Dim oddPart As String, evenPart As String, bornes As String
     Dim fullVoie As String, lenLast As Long, ligneText As String, ligne3Text As String
-    Dim n As Long
-
+    Dim lignes As Collection, info As Variant
+    Dim idx As Long, r As Long, colOff As Long, hasGreen As Boolean
+    Dim n As Long, totalCols As Long, lastCol As String
+    
+    ' Calcul du nombre total de colonnes (2 par paire voie/tournée)
+    totalCols = nbColumns * 2
+    lastCol = Chr(64 + totalCols) ' Conversion en lettre de colonne
+    
     currentRow = 1
     For Each cName In SortByLastWord(dictCom.Keys)
         prevLetter = ""
         Set dictVoie = dictCom(cName)
 
+        ' Déterminer toutes les tournées
         Set dictAllTours = CreateObject("Scripting.Dictionary")
         For Each routeKey In dictVoie.Keys
             For Each tName In dictVoie(routeKey).Keys
@@ -212,508 +224,169 @@ Public Sub GenerateCourrierStandard(dictCom As Object, wsOut As Worksheet)
             Next
         Next
 
+        ' En-tête de commune
         If dictAllTours.Count = 1 Then
             onlyTours = dictAllTours.Keys
-            With wsOut.Range("A" & currentRow & ":B" & currentRow)
+            With wsOut.Range("A" & currentRow & ":" & lastCol & currentRow)
                 .Merge: .Value = cName & " (" & onlyTours(0) & ")"
                 .Interior.Color = vbYellow: .Font.Bold = True
                 .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
             End With
+            currentRow = currentRow + 1
+            Set lignes = New Collection
         Else
-            With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                .Merge: .Value = cName
-                .Interior.Color = vbBlack: .Font.Color = vbWhite: .Font.Bold = True
-                .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-            End With
+            shouldUseToutSauf = useToutSauf And (dictAllTours.Count <= 4)
+            If shouldUseToutSauf Then
+                ' Calcul de la tournée majoritaire
+                Set countPerTour = CreateObject("Scripting.Dictionary")
+                For Each routeKey In dictVoie.Keys
+                    Set dictTour = dictVoie(routeKey)
+                    If dictTour.Count = 1 Then
+                        onlyTours = dictTour.Keys
+                        If Not countPerTour.Exists(onlyTours(0)) Then countPerTour.Add onlyTours(0), 0
+                        countPerTour(onlyTours(0)) = countPerTour(onlyTours(0)) + 1
+                    End If
+                Next
+                majorityTour = "": maxCount = 0
+                For Each tName In countPerTour.Keys
+                    If countPerTour(tName) > maxCount Then
+                        maxCount = countPerTour(tName): majorityTour = tName
+                    End If
+                Next
+                With wsOut.Range("A" & currentRow & ":" & lastCol & currentRow)
+                    .Merge: .Value = cName & " (" & majorityTour & ") sauf :"
+                    .Interior.Color = vbBlue: .Font.Color = vbWhite: .Font.Bold = True
+                    .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
+                End With
+            Else
+                With wsOut.Range("A" & currentRow & ":" & lastCol & currentRow)
+                    .Merge: .Value = cName
+                    .Interior.Color = vbBlack: .Font.Color = vbWhite: .Font.Bold = True
+                    .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
+                End With
+            End If
+            currentRow = currentRow + 1
+            Set lignes = New Collection
         End If
-        currentRow = currentRow + 1
 
+        ' Collecte des lignes
         For Each routeKey In SortByLastWord(dictVoie.Keys)
             Set dictTour = dictVoie(routeKey)
-            For Each tName In dictTour.Keys
-                ' Par défaut, bornes affichées sauf si voie mono tournée+sécable
-                If dictTour.Count = 1 Then
-                    bornes = ""
-                Else
-                    oddMin = 999999: oddMax = -1: evenMin = 999999: evenMax = -1
-                    For Each keyNum In dictTour(tName).Keys
-                        If IsNumeric(keyNum) Then
-                            n = CLng(keyNum)
-                            If n Mod 2 = 0 Then
-                                If n < evenMin Then evenMin = n
-                                If n > evenMax Then evenMax = n
-                            Else
-                                If n < oddMin Then oddMin = n
-                                If n > oddMax Then oddMax = n
+            
+            ' Filtrage pour mode "Tout sauf"
+            If shouldUseToutSauf And dictTour.Count = 1 And dictTour.Exists(majorityTour) Then
+                ' Ne pas inclure cette voie
+            Else
+                For Each tName In dictTour.Keys
+                    ' Calcul des bornes
+                    If dictTour.Count = 1 Then
+                        bornes = ""
+                    Else
+                        oddMin = 999999: oddMax = -1: evenMin = 999999: evenMax = -1
+                        For Each keyNum In dictTour(tName).Keys
+                            If IsNumeric(keyNum) Then
+                                n = CLng(keyNum)
+                                If n Mod 2 = 0 Then
+                                    If n < evenMin Then evenMin = n
+                                    If n > evenMax Then evenMax = n
+                                Else
+                                    If n < oddMin Then oddMin = n
+                                    If n > oddMax Then oddMax = n
+                                End If
                             End If
+                        Next
+
+                        If oddMin > oddMax Then
+                            oddPart = ""
+                        ElseIf oddMin = oddMax Then
+                            oddPart = CStr(oddMin)
+                        Else
+                            oddPart = CStr(oddMin) & " à " & CStr(oddMax)
                         End If
-                    Next
-
-                    If oddMin > oddMax Then
-                        oddPart = ""
-                    ElseIf oddMin = oddMax Then
-                        oddPart = CStr(oddMin)
-                    Else
-                        oddPart = CStr(oddMin) & " à " & CStr(oddMax)
+                        If evenMin > evenMax Then
+                            evenPart = ""
+                        ElseIf evenMin = evenMax Then
+                            evenPart = CStr(evenMin)
+                        Else
+                            evenPart = CStr(evenMin) & " à " & CStr(evenMax)
+                        End If
+                        bornes = oddPart & IIf(evenPart <> "", " et " & evenPart, "")
                     End If
-                    If evenMin > evenMax Then
-                        evenPart = ""
-                    ElseIf evenMin = evenMax Then
-                        evenPart = CStr(evenMin)
-                    Else
-                        evenPart = CStr(evenMin) & " à " & CStr(evenMax)
-                    End If
-                    bornes = oddPart & IIf(evenPart <> "", " et " & evenPart, "")
-                End If
 
-                lenLast = Len(GetLastWord(routeKey))
-                ligneText = GetLigneText(cName, routeKey, tName)
-                ligne3Text = GetLigne3Text(cName, routeKey, tName)
-                fullVoie = UCase$(GetLastWord(routeKey)) & " (" & _
-                           GetAbbreviatedRest(routeKey) & ")" & _
-                           IIf(ligne3Text <> "", " " & ligne3Text, "") & _
-                           IIf(ligneText <> "", " " & ligneText, "") & _
-                           IIf(bornes <> "", " " & bornes, "")
+                    lenLast = Len(GetLastWord(routeKey))
+                    ligneText = GetLigneText(cName, routeKey, tName)
+                    ligne3Text = GetLigne3Text(cName, routeKey, tName)
+                    fullVoie = UCase$(GetLastWord(routeKey)) & " (" & _
+                               GetAbbreviatedRest(routeKey) & ")" & _
+                               IIf(ligne3Text <> "", " " & ligne3Text, "") & _
+                               IIf(ligneText <> "", " " & ligneText, "") & _
+                               IIf(bornes <> "", " " & bornes, "")
+                    
+                    currentLetter = Left(UCase$(GetLastWord(routeKey)), 1)
+                    info = Array(fullVoie, tName, (dictTour.Count > 1), _
+                                 (currentLetter <> prevLetter), lenLast)
+                    prevLetter = currentLetter
+                    lignes.Add info
+                Next
+            End If
+        Next
 
-                wsOut.Cells(currentRow, 1).Value = fullVoie
-                wsOut.Cells(currentRow, 2).Value = tName
-                If dictTour.Count > 1 Then
+        ' Affichage des lignes
+        If nbColumns = 1 Then
+            ' Mode 1 colonne (ancien mode Courrier)
+            For idx = 1 To lignes.Count
+                info = lignes(idx)
+                wsOut.Cells(currentRow, 1).Value = info(0)
+                wsOut.Cells(currentRow, 2).Value = info(1)
+                
+                If info(2) Then ' Si voie multi-tournées
                     With wsOut.Range("A" & currentRow & ":B" & currentRow)
                         .Interior.Color = vbGreen: .Font.Color = vbWhite
                     End With
                 End If
-                With wsOut.Cells(currentRow, 1).Characters(1, lenLast).Font
+                
+                With wsOut.Cells(currentRow, 1).Characters(1, info(4)).Font
                     .Bold = True: .Size = 12
                 End With
-                currentLetter = Left(UCase$(GetLastWord(routeKey)), 1)
-                If currentLetter <> prevLetter Then
+                
+                If info(3) Then ' Si nouvelle lettre
                     With wsOut.Cells(currentRow, 1).Font: .Underline = xlUnderlineStyleDouble: End With
                     With wsOut.Cells(currentRow, 1).Characters(1, 1).Font
                         .Color = vbBlue: .Size = 14
                     End With
-                    prevLetter = currentLetter
                 End If
-                If (currentRow Mod 2) = 0 Then
-                    With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                        If .Interior.ColorIndex = xlColorIndexNone Then .Interior.Color = RGB(242, 242, 242)
-                    End With
+                
+                If (currentRow Mod 2) = 0 And Not info(2) Then
+                    wsOut.Range("A" & currentRow & ":B" & currentRow).Interior.Color = RGB(242, 242, 242)
                 End If
+                
                 currentRow = currentRow + 1
             Next
-        Next
-    Next
-End Sub
-
-Public Sub GenerateCourrierToutSauf(dictCom As Object, wsOut As Worksheet)
-    Dim cName As Variant, dictVoie As Object, dictTour As Object
-    Dim dictAllTours As Object, countPerTour As Object, onlyTours As Variant
-    Dim majorityTour As String, maxCount As Long, useToutSauf As Boolean
-    Dim routeKey As Variant, tName As Variant, keyNum As Variant
-    Dim currentRow As Long, prevLetter As String, currentLetter As String
-    Dim oddMin As Long, oddMax As Long, evenMin As Long, evenMax As Long
-    Dim oddPart As String, evenPart As String, bornes As String
-    Dim fullVoie As String, lenLast As Long, ligneText As String, ligne3Text As String
-    Dim n As Long
-
-    currentRow = 1
-    For Each cName In SortByLastWord(dictCom.Keys)
-        prevLetter = ""
-        Set dictVoie = dictCom(cName)
-
-        Set dictAllTours = CreateObject("Scripting.Dictionary")
-        For Each routeKey In dictVoie.Keys
-            For Each tName In dictVoie(routeKey).Keys
-                If Not dictAllTours.Exists(tName) Then dictAllTours.Add tName, True
-            Next
-        Next
-
-        If dictAllTours.Count = 1 Then
-            onlyTours = dictAllTours.Keys
-            With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                .Merge: .Value = cName & " (" & onlyTours(0) & ")"
-                .Interior.Color = vbYellow: .Font.Bold = True
-                .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-            End With
-            currentRow = currentRow + 1
         Else
-            useToutSauf = (dictAllTours.Count <= 4)
-            If useToutSauf Then
-                Set countPerTour = CreateObject("Scripting.Dictionary")
-                For Each routeKey In dictVoie.Keys
-                    Set dictTour = dictVoie(routeKey)
-                    If dictTour.Count = 1 Then
-                        onlyTours = dictTour.Keys
-                        If Not countPerTour.Exists(onlyTours(0)) Then countPerTour.Add onlyTours(0), 0
-                        countPerTour(onlyTours(0)) = countPerTour(onlyTours(0)) + 1
-                    End If
-                Next
-                majorityTour = "": maxCount = 0
-                For Each tName In countPerTour.Keys
-                    If countPerTour(tName) > maxCount Then
-                        maxCount = countPerTour(tName): majorityTour = tName
-                    End If
-                Next
-                With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                    .Merge: .Value = cName & " (" & majorityTour & ") sauf :"
-                    .Interior.Color = vbBlue: .Font.Color = vbWhite: .Font.Bold = True
-                    .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-                End With
-            Else
-                With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                    .Merge: .Value = cName
-                    .Interior.Color = vbBlack: .Font.Color = vbWhite: .Font.Bold = True
-                    .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-                End With
-            End If
-            currentRow = currentRow + 1
-
-            For Each routeKey In SortByLastWord(dictVoie.Keys)
-                Set dictTour = dictVoie(routeKey)
-                If Not (useToutSauf And dictTour.Count = 1 And dictTour.Exists(majorityTour)) Then
-                    For Each tName In dictTour.Keys
-                        If dictTour.Count = 1 Then
-                            bornes = ""
-                        Else
-                            oddMin = 999999: oddMax = -1: evenMin = 999999: evenMax = -1
-                            For Each keyNum In dictTour(tName).Keys
-                                If IsNumeric(keyNum) Then
-                                    n = CLng(keyNum)
-                                    If n Mod 2 = 0 Then
-                                        If n < evenMin Then evenMin = n
-                                        If n > evenMax Then evenMax = n
-                                    Else
-                                        If n < oddMin Then oddMin = n
-                                        If n > oddMax Then oddMax = n
-                                    End If
-                                End If
-                            Next
-
-                            If oddMin > oddMax Then
-                                oddPart = ""
-                            ElseIf oddMin = oddMax Then
-                                oddPart = CStr(oddMin)
-                            Else
-                                oddPart = CStr(oddMin) & " à " & CStr(oddMax)
-                            End If
-                            If evenMin > evenMax Then
-                                evenPart = ""
-                            ElseIf evenMin = evenMax Then
-                                evenPart = CStr(evenMin)
-                            Else
-                                evenPart = CStr(evenMin) & " à " & CStr(evenMax)
-                            End If
-                            bornes = oddPart & IIf(evenPart <> "", " et " & evenPart, "")
-                        End If
-
-                        lenLast = Len(GetLastWord(routeKey))
-                        ligneText = GetLigneText(cName, routeKey, tName)
-                        ligne3Text = GetLigne3Text(cName, routeKey, tName)
-                        fullVoie = UCase$(GetLastWord(routeKey)) & " (" & _
-                                   GetAbbreviatedRest(routeKey) & ")" & _
-                                   IIf(ligne3Text <> "", " " & ligne3Text, "") & _
-                                   IIf(ligneText <> "", " " & ligneText, "") & _
-                                   IIf(bornes <> "", " " & bornes, "")
-
-                        wsOut.Cells(currentRow, 1).Value = fullVoie
-                        wsOut.Cells(currentRow, 2).Value = tName
-                        If dictTour.Count > 1 Then
-                            With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                                .Interior.Color = vbGreen: .Font.Color = vbWhite
-                            End With
-                        End If
-                        With wsOut.Cells(currentRow, 1).Characters(1, lenLast).Font
-                            .Bold = True: .Size = 12
-                        End With
-                        currentLetter = Left(UCase$(GetLastWord(routeKey)), 1)
-                        If currentLetter <> prevLetter Then
-                            With wsOut.Cells(currentRow, 1).Font: .Underline = xlUnderlineStyleDouble: End With
-                            With wsOut.Cells(currentRow, 1).Characters(1, 1).Font
-                                .Color = vbBlue: .Size = 14
-                            End With
-                            prevLetter = currentLetter
-                        End If
-                        If (currentRow Mod 2) = 0 Then
-                            With wsOut.Range("A" & currentRow & ":B" & currentRow)
-                                If .Interior.ColorIndex = xlColorIndexNone Then .Interior.Color = RGB(242, 242, 242)
-                            End With
-                        End If
-                        currentRow = currentRow + 1
-                    Next
-                End If
-            Next
-        End If
-    Next
-End Sub
-
-Public Sub GenerateColisStandard(dictCom As Object, wsOut As Worksheet)
-    Dim cName As Variant, dictVoie As Object, dictTour As Object
-    Dim dictAllTours As Object, onlyTours As Variant
-    Dim routeKey As Variant, tName As Variant, keyNum As Variant
-    Dim currentRow As Long, prevLetter As String
-    Dim oddMin As Long, oddMax As Long, evenMin As Long, evenMax As Long
-    Dim oddPart As String, evenPart As String, bornes As String
-    Dim fullVoie As String, lenLast As Long, ligneText As String, ligne3Text As String
-    Dim lignes As Collection, info As Variant
-    Dim idx As Long, r As Long, colOff As Long, hasGreen As Boolean
-    Dim n As Long
-
-    currentRow = 1
-    For Each cName In SortByLastWord(dictCom.Keys)
-        prevLetter = ""
-        Set dictVoie = dictCom(cName)
-
-        Set dictAllTours = CreateObject("Scripting.Dictionary")
-        For Each routeKey In dictVoie.Keys
-            For Each tName In dictVoie(routeKey).Keys
-                If Not dictAllTours.Exists(tName) Then dictAllTours.Add tName, True
-            Next
-        Next
-
-        If dictAllTours.Count = 1 Then
-            onlyTours = dictAllTours.Keys
-            With wsOut.Range("A" & currentRow & ":F" & currentRow)
-                .Merge: .Value = cName & " (" & onlyTours(0) & ")"
-                .Interior.Color = vbYellow: .Font.Bold = True
-                .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-            End With
-        Else
-            With wsOut.Range("A" & currentRow & ":F" & currentRow)
-                .Merge: .Value = cName
-                .Interior.Color = vbBlack: .Font.Color = vbWhite: .Font.Bold = True
-                .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-            End With
-        End If
-        currentRow = currentRow + 1
-
-        Set lignes = New Collection
-        For Each routeKey In SortByLastWord(dictVoie.Keys)
-            Set dictTour = dictVoie(routeKey)
-            For Each tName In dictTour.Keys
-                If dictTour.Count = 1 Then
-                    bornes = ""
-                Else
-                    oddMin = 999999: oddMax = -1: evenMin = 999999: evenMax = -1
-                    For Each keyNum In dictTour(tName).Keys
-                        If IsNumeric(keyNum) Then
-                            n = CLng(keyNum)
-                            If n Mod 2 = 0 Then
-                                If n < evenMin Then evenMin = n
-                                If n > evenMax Then evenMax = n
-                            Else
-                                If n < oddMin Then oddMin = n
-                                If n > oddMax Then oddMax = n
-                            End If
-                        End If
-                    Next
-
-                    If oddMin > oddMax Then
-                        oddPart = ""
-                    ElseIf oddMin = oddMax Then
-                        oddPart = CStr(oddMin)
-                    Else
-                        oddPart = CStr(oddMin) & " à " & CStr(oddMax)
-                    End If
-                    If evenMin > evenMax Then
-                        evenPart = ""
-                    ElseIf evenMin = evenMax Then
-                        evenPart = CStr(evenMin)
-                    Else
-                        evenPart = CStr(evenMin) & " à " & CStr(evenMax)
-                    End If
-                    bornes = oddPart & IIf(evenPart <> "", " et " & evenPart, "")
-                End If
-
-                lenLast = Len(GetLastWord(routeKey))
-                ligneText = GetLigneText(cName, routeKey, tName)
-                ligne3Text = GetLigne3Text(cName, routeKey, tName)
-                fullVoie = UCase$(GetLastWord(routeKey)) & " (" & _
-                           GetAbbreviatedRest(routeKey) & ")" & _
-                           IIf(ligne3Text <> "", " " & ligne3Text, "") & _
-                           IIf(ligneText <> "", " " & ligneText, "") & _
-                           IIf(bornes <> "", " " & bornes, "")
-                info = Array(fullVoie, tName, (dictTour.Count > 1), _
-                             (Left(UCase$(GetLastWord(routeKey)), 1) <> prevLetter), lenLast)
-                prevLetter = Left(UCase$(GetLastWord(routeKey)), 1)
-                lignes.Add info
-            Next
-        Next
-
-        r = currentRow
-        For idx = 1 To lignes.Count Step 3
-            hasGreen = False
-            For colOff = 0 To 2
-                If idx + colOff <= lignes.Count Then
-                    info = lignes(idx + colOff)
-                    With wsOut
-                        .Cells(r, 1 + 2 * colOff).Value = info(0)
-                        .Cells(r, 1 + 2 * colOff + 1).Value = info(1)
-                    End With
-                    If info(2) Then
-                        With wsOut.Range(wsOut.Cells(r, 1 + 2 * colOff), wsOut.Cells(r, 1 + 2 * colOff + 1))
-                            .Interior.Color = vbGreen: .Font.Color = vbWhite
-                        End With
-                        hasGreen = True
-                    End If
-                    With wsOut.Cells(r, 1 + 2 * colOff).Characters(1, info(4)).Font
-                        .Bold = True: .Size = 12
-                    End With
-                    If info(3) Then
-                        With wsOut.Cells(r, 1 + 2 * colOff).Font: .Underline = xlUnderlineStyleDouble: End With
-                        With wsOut.Cells(r, 1 + 2 * colOff).Characters(1, 1).Font
-                            .Color = vbBlue: .Size = 14
-                        End With
-                    End If
-                End If
-            Next
-            If Not hasGreen Then
-                If (r Mod 2) = 0 Then wsOut.Range("A" & r & ":F" & r).Interior.Color = RGB(242, 242, 242)
-            End If
-            r = r + 1
-        Next
-        currentRow = r
-    Next
-End Sub
-
-Public Sub GenerateColisToutSauf(dictCom As Object, wsOut As Worksheet)
-    Dim cName As Variant, dictVoie As Object, dictTour As Object
-    Dim dictAllTours As Object, countPerTour As Object, onlyTours As Variant
-    Dim majorityTour As String, maxCount As Long, useToutSauf As Boolean
-    Dim routeKey As Variant, tName As Variant, keyNum As Variant
-    Dim currentRow As Long, prevLetter As String
-    Dim oddMin As Long, oddMax As Long, evenMin As Long, evenMax As Long
-    Dim oddPart As String, evenPart As String, bornes As String
-    Dim fullVoie As String, lenLast As Long, ligneText As String, ligne3Text As String
-    Dim lignes As Collection, info As Variant
-    Dim idx As Long, r As Long, colOff As Long, hasGreen As Boolean
-    Dim n As Long
-
-    currentRow = 1
-    For Each cName In SortByLastWord(dictCom.Keys)
-        prevLetter = ""
-        Set dictVoie = dictCom(cName)
-
-        Set dictAllTours = CreateObject("Scripting.Dictionary")
-        For Each routeKey In dictVoie.Keys
-            For Each tName In dictVoie(routeKey).Keys
-                If Not dictAllTours.Exists(tName) Then dictAllTours.Add tName, True
-            Next
-        Next
-
-        If dictAllTours.Count = 1 Then
-            onlyTours = dictAllTours.Keys
-            With wsOut.Range("A" & currentRow & ":F" & currentRow)
-                .Merge: .Value = cName & " (" & onlyTours(0) & ")"
-                .Interior.Color = vbYellow: .Font.Bold = True
-                .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-            End With
-            currentRow = currentRow + 1
-        Else
-            useToutSauf = (dictAllTours.Count <= 4)
-            If useToutSauf Then
-                Set countPerTour = CreateObject("Scripting.Dictionary")
-                For Each routeKey In dictVoie.Keys
-                    Set dictTour = dictVoie(routeKey)
-                    If dictTour.Count = 1 Then
-                        onlyTours = dictTour.Keys
-                        If Not countPerTour.Exists(onlyTours(0)) Then countPerTour.Add onlyTours(0), 0
-                        countPerTour(onlyTours(0)) = countPerTour(onlyTours(0)) + 1
-                    End If
-                Next
-                majorityTour = "": maxCount = 0
-                For Each tName In countPerTour.Keys
-                    If countPerTour(tName) > maxCount Then
-                        maxCount = countPerTour(tName): majorityTour = tName
-                    End If
-                Next
-                With wsOut.Range("A" & currentRow & ":F" & currentRow)
-                    .Merge: .Value = cName & " (" & majorityTour & ") sauf :"
-                    .Interior.Color = vbBlue: .Font.Color = vbWhite: .Font.Bold = True
-                    .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-                End With
-            Else
-                With wsOut.Range("A" & currentRow & ":F" & currentRow)
-                    .Merge: .Value = cName
-                    .Interior.Color = vbBlack: .Font.Color = vbWhite: .Font.Bold = True
-                    .HorizontalAlignment = xlCenter: .VerticalAlignment = xlCenter
-                End With
-            End If
-            currentRow = currentRow + 1
-
-            Set lignes = New Collection
-            For Each routeKey In SortByLastWord(dictVoie.Keys)
-                Set dictTour = dictVoie(routeKey)
-                If Not (useToutSauf And dictTour.Count = 1 And dictTour.Exists(majorityTour)) Then
-                    For Each tName In dictTour.Keys
-                        If dictTour.Count = 1 Then
-                            bornes = ""
-                        Else
-                            oddMin = 999999: oddMax = -1: evenMin = 999999: evenMax = -1
-                            For Each keyNum In dictTour(tName).Keys
-                                If IsNumeric(keyNum) Then
-                                    n = CLng(keyNum)
-                                    If n Mod 2 = 0 Then
-                                        If n < evenMin Then evenMin = n
-                                        If n > evenMax Then evenMax = n
-                                    Else
-                                        If n < oddMin Then oddMin = n
-                                        If n > oddMax Then oddMax = n
-                                    End If
-                                End If
-                            Next
-
-                            If oddMin > oddMax Then
-                                oddPart = ""
-                            ElseIf oddMin = oddMax Then
-                                oddPart = CStr(oddMin)
-                            Else
-                                oddPart = CStr(oddMin) & " à " & CStr(oddMax)
-                            End If
-                            If evenMin > evenMax Then
-                                evenPart = ""
-                            ElseIf evenMin = evenMax Then
-                                evenPart = CStr(evenMin)
-                            Else
-                                evenPart = CStr(evenMin) & " à " & CStr(evenMax)
-                            End If
-                            bornes = oddPart & IIf(evenPart <> "", " et " & evenPart, "")
-                        End If
-
-                        lenLast = Len(GetLastWord(routeKey))
-                        ligneText = GetLigneText(cName, routeKey, tName)
-                        ligne3Text = GetLigne3Text(cName, routeKey, tName)
-                        fullVoie = UCase$(GetLastWord(routeKey)) & " (" & _
-                                   GetAbbreviatedRest(routeKey) & ")" & _
-                                   IIf(ligne3Text <> "", " " & ligne3Text, "") & _
-                                   IIf(ligneText <> "", " " & ligneText, "") & _
-                                   IIf(bornes <> "", " " & bornes, "")
-                        info = Array(fullVoie, tName, (dictTour.Count > 1), _
-                                     (Left(UCase$(GetLastWord(routeKey)), 1) <> prevLetter), lenLast)
-                        prevLetter = Left(UCase$(GetLastWord(routeKey)), 1)
-                        lignes.Add info
-                    Next
-                End If
-            Next
-
+            ' Mode multi-colonnes
             r = currentRow
-            For idx = 1 To lignes.Count Step 3
+            For idx = 1 To lignes.Count Step nbColumns
                 hasGreen = False
-                For colOff = 0 To 2
+                For colOff = 0 To nbColumns - 1
                     If idx + colOff <= lignes.Count Then
                         info = lignes(idx + colOff)
                         With wsOut
                             .Cells(r, 1 + 2 * colOff).Value = info(0)
                             .Cells(r, 1 + 2 * colOff + 1).Value = info(1)
                         End With
-                        If info(2) Then
+                        
+                        If info(2) Then ' Si voie multi-tournées
                             With wsOut.Range(wsOut.Cells(r, 1 + 2 * colOff), wsOut.Cells(r, 1 + 2 * colOff + 1))
                                 .Interior.Color = vbGreen: .Font.Color = vbWhite
                             End With
                             hasGreen = True
                         End If
+                        
                         With wsOut.Cells(r, 1 + 2 * colOff).Characters(1, info(4)).Font
                             .Bold = True: .Size = 12
                         End With
-                        If info(3) Then
+                        
+                        If info(3) Then ' Si nouvelle lettre
                             With wsOut.Cells(r, 1 + 2 * colOff).Font: .Underline = xlUnderlineStyleDouble: End With
                             With wsOut.Cells(r, 1 + 2 * colOff).Characters(1, 1).Font
                                 .Color = vbBlue: .Size = 14
@@ -721,8 +394,9 @@ Public Sub GenerateColisToutSauf(dictCom As Object, wsOut As Worksheet)
                         End If
                     End If
                 Next
+                
                 If Not hasGreen Then
-                    If (r Mod 2) = 0 Then wsOut.Range("A" & r & ":F" & r).Interior.Color = RGB(242, 242, 242)
+                    If (r Mod 2) = 0 Then wsOut.Range("A" & r & ":" & lastCol & r).Interior.Color = RGB(242, 242, 242)
                 End If
                 r = r + 1
             Next
@@ -731,22 +405,48 @@ Public Sub GenerateColisToutSauf(dictCom As Object, wsOut As Worksheet)
     Next
 End Sub
 
+' === PROCÉDURE PRINCIPALE ===
+
 Public Sub GenererIndicateurTournées()
-    Dim versionType As Long, mode As Long
+    Dim nbColumns As Long, mode As Long
     Dim dictCom As Object
     Dim wsOut As Worksheet
+    Dim useToutSauf As Boolean
+    Dim i As Long
 
-    versionType = Application.InputBox("1 = Courrier" & vbCrLf & "2 = Colis", "Version", 1, Type:=1)
-    If versionType <> 1 And versionType <> 2 Then MsgBox "Version invalide.": Exit Sub
-    mode = Application.InputBox("1 = Standard" & vbCrLf & "2 = Tout sauf", "Mode affichage", 1, Type:=1)
-    If mode <> 1 And mode <> 2 Then MsgBox "Mode invalide.": Exit Sub
+    ' Demander le nombre de colonnes
+    nbColumns = Application.InputBox( _
+        "Nombre de colonnes pour l'affichage ?" & vbCrLf & _
+        "(1 = mode simple, 2+ = mode multi-colonnes)", _
+        "Configuration de l'affichage", 1, Type:=1)
+    
+    If nbColumns < 1 Then
+        MsgBox "Le nombre de colonnes doit être au moins 1.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Demander le mode d'affichage
+    mode = Application.InputBox( _
+        "Mode d'affichage :" & vbCrLf & _
+        "1 = Standard (toutes les voies)" & vbCrLf & _
+        "2 = Tout sauf (masquer les voies majoritaires)", _
+        "Mode d'affichage", 1, Type:=1)
+    
+    If mode <> 1 And mode <> 2 Then
+        MsgBox "Mode invalide.", vbExclamation
+        Exit Sub
+    End If
+    
+    useToutSauf = (mode = 2)
 
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
     Application.EnableEvents = False
 
+    ' Charger les données
     Set dictCom = LoadTourneeData(ActiveSheet)
 
+    ' Créer la nouvelle feuille
     On Error Resume Next
     Application.DisplayAlerts = False
     Worksheets("indicateur de tg à vérifier").Delete
@@ -756,31 +456,25 @@ Public Sub GenererIndicateurTournées()
     Set wsOut = Worksheets.Add(After:=Sheets(Sheets.Count))
     wsOut.Name = "indicateur de tg à vérifier"
 
-    If versionType = 1 Then
-        If mode = 1 Then
-            GenerateCourrierStandard dictCom, wsOut
-        Else
-            GenerateCourrierToutSauf dictCom, wsOut
-        End If
-        wsOut.Columns("A:B").AutoFit
-        wsOut.Range("B1:B" & wsOut.UsedRange.Rows.Count).HorizontalAlignment = xlCenter
-    Else
-        If mode = 1 Then
-            GenerateColisStandard dictCom, wsOut
-        Else
-            GenerateColisToutSauf dictCom, wsOut
-        End If
-        wsOut.Columns("A:F").AutoFit
-        wsOut.Range("B1:B" & wsOut.UsedRange.Rows.Count & ",D1:D" & wsOut.UsedRange.Rows.Count & ",F1:F" & wsOut.UsedRange.Rows.Count).HorizontalAlignment = xlCenter
-    End If
+    ' Générer l'indicateur
+    GenerateIndicateurFlexible dictCom, wsOut, nbColumns, useToutSauf
 
+    ' Ajuster les largeurs de colonnes
+    For i = 1 To nbColumns * 2
+        wsOut.Columns(i).AutoFit
+    Next i
+    
+    ' Centrer les colonnes de tournées (colonnes paires)
+    For i = 2 To nbColumns * 2 Step 2
+        wsOut.Columns(i).HorizontalAlignment = xlCenter
+    Next i
+
+    ' Ajouter les bordures
     wsOut.UsedRange.Borders.LineStyle = xlDash
 
     Application.ScreenUpdating = True
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
 
-    MsgBox "Indicateur généré dans 'indicateur de tg à vérifier'.", vbInformation
+    MsgBox "Indicateur généré avec " & nbColumns & " colonne(s) dans 'indicateur de tg à vérifier'.", vbInformation
 End Sub
-
-
