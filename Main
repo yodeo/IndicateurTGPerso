@@ -143,7 +143,8 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
     ' Parcours unique des données avec construction immédiate
     Dim commune As String, voie As String, tournee As String, numero As String
     Dim secable As String, ligne As String, ligne3 As String
-    Dim key As String, subKey As String
+    Dim key As Variant, subKey As String
+    Dim keyStr As String
     
     For i = 2 To rowCount
         commune = Trim(CStr(dataArr(i, colMap(1))))
@@ -201,13 +202,13 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
     ' Regrouper par commune
     For Each key In dataDict.Keys
         Dim parts() As String
-        parts = Split(key, "|")
+        parts = Split(CStr(key), "|")
         commune = parts(0)
         
         If Not communes.Exists(commune) Then
             Set communes(commune) = CreateObject("Scripting.Dictionary")
         End If
-        communes(commune)(key) = True
+        communes(commune)(CStr(key)) = True
     Next
     
     ' Générer la sortie optimisée
@@ -230,14 +231,14 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         Set communeData = CreateObject("Scripting.Dictionary")
         
         For Each key In communes(commune).Keys
-            parts = Split(key, "|")
+            parts = Split(CStr(key), "|")
             voie = parts(1)
             tournee = parts(2)
             
             If Not communeData.Exists(voie) Then
                 Set communeData(voie) = CreateObject("Scripting.Dictionary")
             End If
-            communeData(voie)(tournee) = key
+            communeData(voie)(tournee) = CStr(key)
         Next
         
         ' Déterminer le mode tout sauf
@@ -286,33 +287,37 @@ Private Sub ProcessDataUltraFast(wsSource As Worksheet, wsOut As Worksheet, _
         
         prevLetter = ""
         For Each voie In voieKeys
-            For Each tournee In communeData(voie).Keys
-                key = communeData(voie)(tournee)
+            Dim voieStr As String
+            voieStr = CStr(voie)
+            For Each tournee In communeData(voieStr).Keys
+                Dim tourneeStr As String
+                tourneeStr = CStr(tournee)
+                keyStr = communeData(voieStr)(tourneeStr)
                 
                 ' Construire le texte
-                lastWord = GetLastWordFast(voie)
-                fullText = UCase$(lastWord) & " (" & GetAbbreviatedFast(voie) & ")"
+                lastWord = GetLastWordFast(voieStr)
+                fullText = UCase$(lastWord) & " (" & GetAbbreviatedFast(voieStr) & ")"
                 
                 ' Ajouter ligne3
-                If dataDict(key)("ligne3").Count > 0 Then
-                    fullText = fullText & " " & Join(dataDict(key)("ligne3").Keys, " - ") & " -"
+                If dataDict(keyStr)("ligne3").Count > 0 Then
+                    fullText = fullText & " " & Join(dataDict(keyStr)("ligne3").Keys, " - ") & " -"
                 End If
                 
                 ' Ajouter ligne
-                If dataDict(key)("ligne") <> "" Then
-                    fullText = fullText & " " & dataDict(key)("ligne")
+                If dataDict(keyStr)("ligne") <> "" Then
+                    fullText = fullText & " " & dataDict(keyStr)("ligne")
                 End If
                 
                 ' Calculer les bornes si multi-tournées
-                If communeData(voie).Count > 1 Then
-                    bornes = CalculateBornesFast(dataDict(key)("nums"))
+                If communeData(voieStr).Count > 1 Then
+                    bornes = CalculateBornesFast(dataDict(keyStr)("nums"))
                     If bornes <> "" Then fullText = fullText & " " & bornes
                 End If
                 
                 bufferCount = bufferCount + 1
                 ligneBuffer(bufferCount, 1) = fullText
-                ligneBuffer(bufferCount, 2) = tournee
-                ligneBuffer(bufferCount, 3) = IIf(communeData(voie).Count > 1, 1, 0)
+                ligneBuffer(bufferCount, 2) = tourneeStr
+                ligneBuffer(bufferCount, 3) = IIf(communeData(voieStr).Count > 1, 1, 0)
                 ligneBuffer(bufferCount, 4) = IIf(Left(UCase$(lastWord), 1) <> prevLetter, 1, 0)
                 ligneBuffer(bufferCount, 5) = Len(lastWord)
                 
