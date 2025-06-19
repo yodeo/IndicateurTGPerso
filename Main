@@ -1,26 +1,32 @@
 Sub CalculerBornes()
     '=========================================================================
-    ' VERSION ULTRA-SIMPLIFIÉE - ÉVITE LES DICTIONNAIRES COMPLEXES
+    ' VERSION OPTIMISÉE POUR LA VITESSE - MÊME RÉSULTAT FINAL
     '=========================================================================
     
     Dim ws As Worksheet
     Dim wsCalcul As Worksheet
     Dim lastRow As Long
-    Dim i As Long, j As Long
-    Dim ligneResultat As Long
+    Dim dataArray As Variant
+    Dim resultData() As Variant
+    Dim resultCount As Long
+    
+    ' Optimisations Excel
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
     
     ' 1. IDENTIFICATION DE LA FEUILLE SOURCE
     '=========================================================================
     Set ws = Nothing
     Dim wsTemp As Worksheet
     
-    For Each wsTemp in ThisWorkbook.Worksheets
+    For Each wsTemp In ThisWorkbook.Worksheets
         If wsTemp.Name <> "Calcul des bornes" Then
             Dim h1 As String, h4 As String, h6 As String, h7 As String
-            h1 = CellToString(wsTemp.Cells(1, 1))
-            h4 = CellToString(wsTemp.Cells(1, 4))
-            h6 = CellToString(wsTemp.Cells(1, 6))
-            h7 = CellToString(wsTemp.Cells(1, 7))
+            h1 = SafeValue(wsTemp.Cells(1, 1).Value)
+            h4 = SafeValue(wsTemp.Cells(1, 4).Value)
+            h6 = SafeValue(wsTemp.Cells(1, 6).Value)
+            h7 = SafeValue(wsTemp.Cells(1, 7).Value)
             
             If (InStr(UCase(h1), "TOURN") > 0) And _
                (InStr(UCase(h4), "NUM") > 0) And _
@@ -34,10 +40,22 @@ Sub CalculerBornes()
     
     If ws Is Nothing Then
         MsgBox "Feuille source non trouvée !", vbCritical
-        Exit Sub
+        GoTo CleanUp
     End If
     
-    ' 2. CRÉATION DE LA FEUILLE RÉSULTAT
+    ' 2. LECTURE MASSIVE DES DONNÉES
+    '=========================================================================
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    If lastRow < 2 Then
+        MsgBox "Aucune donnée trouvée.", vbExclamation
+        GoTo CleanUp
+    End If
+    
+    ' Lire toutes les données d'un coup (beaucoup plus rapide)
+    dataArray = ws.Range("A2:I" & lastRow).Value
+    
+    ' 3. CRÉATION DE LA FEUILLE RÉSULTAT
     '=========================================================================
     Application.DisplayAlerts = False
     Set wsCalcul = Nothing
@@ -53,339 +71,270 @@ Sub CalculerBornes()
     wsCalcul.Name = "Calcul des bornes"
     
     ' En-têtes
-    wsCalcul.Cells(1, 1) = "Commune"
-    wsCalcul.Cells(1, 2) = "Mot directeur"
-    wsCalcul.Cells(1, 3) = "Libelle de voie"
-    wsCalcul.Cells(1, 4) = "Ligne 3"
-    wsCalcul.Cells(1, 5) = "Numéro de voie (borne)"
-    wsCalcul.Cells(1, 6) = "Libelle District"
-    wsCalcul.Cells(1, 7) = "Tournée"
-    wsCalcul.Cells(1, 8) = "Sécable"
-    wsCalcul.Cells(1, 9) = "Samedi"
-    
+    Dim headers As Variant
+    headers = Array("Commune", "Mot directeur", "Libelle de voie", "Ligne 3", _
+                   "Numéro de voie (borne)", "Libelle District", "Tournée", "Sécable", "Samedi")
+    wsCalcul.Range("A1:I1").Value = headers
     wsCalcul.Range("A1:I1").Font.Bold = True
     wsCalcul.Range("A1:I1").Interior.Color = RGB(180, 198, 231)
     
-    ' 3. TRAITEMENT DIRECT LIGNE PAR LIGNE
+    ' 4. TRAITEMENT OPTIMISÉ AVEC DICTIONNAIRE
     '=========================================================================
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    ligneResultat = 2
+    Dim voiesDict As Object
+    Set voiesDict = CreateObject("Scripting.Dictionary")
     
-    ' Array pour marquer les voies déjà traitées
-    ReDim voiesTraitees(1 To lastRow) As Boolean
-    
-    ' Parcourir chaque ligne et traiter les voies une par une
-    For i = 2 To lastRow
-        If Not voiesTraitees(i) Then
-            ' Lire les données de cette ligne
-            Dim commune As String, voie As String, motDirecteur As String
-            Dim ligne3 As String, libelleDistrict As String
+    ' Une seule passe pour regrouper toutes les données par voie
+    Dim i As Long
+    For i = 1 To UBound(dataArray, 1)
+        Dim commune As String, voie As String, motDirecteur As String
+        commune = SafeValue(dataArray(i, 7))  ' Colonne G - Commune
+        voie = SafeValue(dataArray(i, 6))     ' Colonne F - Voie
+        motDirecteur = SafeValue(dataArray(i, 5)) ' Colonne E - Mot Directeur
+        
+        If commune <> "" And voie <> "" Then
+            Dim cleVoie As String
+            cleVoie = commune & "§" & voie
             
-            commune = CellToString(ws.Cells(i, 7))
-            voie = CellToString(ws.Cells(i, 6))
-            motDirecteur = CellToString(ws.Cells(i, 5))
-            ligne3 = CellToString(ws.Cells(i, 3))
-            libelleDistrict = CellToString(ws.Cells(i, 2))
-            
-            ' Ignorer si pas de commune ou voie
-            If commune <> "" And voie <> "" Then
-                ' Marquer cette ligne comme traitée
-                voiesTraitees(i) = True
-                
-                ' Traiter cette voie spécifique
-                Call TraiterVoieSimple(ws, wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, ligneResultat, voiesTraitees, lastRow)
+            ' Initialiser la voie si première fois
+            If Not voiesDict.Exists(cleVoie) Then
+                Dim voieInfo As Object
+                Set voieInfo = CreateObject("Scripting.Dictionary")
+                voieInfo("commune") = commune
+                voieInfo("voie") = voie
+                voieInfo("motDirecteur") = motDirecteur
+                voieInfo("ligne3") = SafeValue(dataArray(i, 3))
+                voieInfo("libelleDistrict") = SafeValue(dataArray(i, 2))
+                voieInfo("lignes") = Array()
+                voiesDict(cleVoie) = voieInfo
             End If
+            
+            ' Ajouter cette ligne aux données de la voie
+            Dim ligneData As Object
+            Set ligneData = CreateObject("Scripting.Dictionary")
+            ligneData("tournee") = SafeValue(dataArray(i, 1))
+            ligneData("secable") = SafeValue(dataArray(i, 8))
+            ligneData("samedi") = SafeValue(dataArray(i, 9))
+            ligneData("numero") = dataArray(i, 4) ' Garder la valeur brute pour IsNumeric
+            
+            ' Ajouter à la collection des lignes
+            Dim lignesExistantes As Variant
+            lignesExistantes = voiesDict(cleVoie)("lignes")
+            ReDim Preserve lignesExistantes(UBound(lignesExistantes) + 1)
+            Set lignesExistantes(UBound(lignesExistantes)) = ligneData
+            voiesDict(cleVoie)("lignes") = lignesExistantes
         End If
     Next i
     
-    ' 4. MISE EN FORME FINALE
+    ' 5. TRAITEMENT DE CHAQUE VOIE ET GÉNÉRATION DES RÉSULTATS
     '=========================================================================
-    Dim nbResultats As Long
-    nbResultats = ligneResultat - 2
+    ReDim resultData(1 To voiesDict.Count * 5, 1 To 9) ' Prévoir large
+    resultCount = 0
     
-    With wsCalcul
-        .Columns("A:I").AutoFit
-        If nbResultats > 0 Then
-            .Range("A1:I" & ligneResultat - 1).Borders.LineStyle = xlContinuous
-        End If
-        .Range("A1:I1").HorizontalAlignment = xlCenter
-        .Range("A1").Select
-    End With
+    Dim voiesKeys As Variant
+    voiesKeys = voiesDict.Keys
     
-    MsgBox "Calcul terminé !" & vbCrLf & "Lignes générées: " & nbResultats, vbInformation
+    For i = 0 To UBound(voiesKeys)
+        Dim voieKey As String
+        voieKey = voiesKeys(i)
+        Dim voie As Object
+        Set voie = voiesDict(voieKey)
+        
+        Call TraiterVoieRapide(voie, resultData, resultCount)
+    Next i
+    
+    ' 6. ÉCRITURE MASSIVE DES RÉSULTATS
+    '=========================================================================
+    If resultCount > 0 Then
+        ' Redimensionner le tableau aux bonnes dimensions
+        ReDim Preserve resultData(1 To resultCount, 1 To 9)
+        
+        ' Écrire tout d'un coup (beaucoup plus rapide)
+        wsCalcul.Range("A2").Resize(resultCount, 9).Value = resultData
+        
+        ' Mise en forme
+        With wsCalcul
+            .Columns("A:I").AutoFit
+            .Range("A1:I" & (resultCount + 1)).Borders.LineStyle = xlContinuous
+            .Range("A1:I1").HorizontalAlignment = xlCenter
+            .Range("A1").Select
+        End With
+    End If
+    
+    MsgBox "Calcul terminé !" & vbCrLf & "Lignes générées: " & resultCount, vbInformation
+    
+CleanUp:
+    ' Restaurer les paramètres Excel
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    Application.DisplayAlerts = True
 End Sub
 
-Function CellToString(ByVal cell As Range) As String
-    ' Fonction ultra-simple pour convertir une cellule en string
-    Dim valeur As Variant
-    valeur = cell.Value
-    
-    If IsEmpty(valeur) Or IsNull(valeur) Then
-        CellToString = ""
-    ElseIf IsError(valeur) Then
-        CellToString = ""
+Function SafeValue(ByVal cellValue As Variant) As String
+    ' Fonction ultra-rapide pour convertir une valeur
+    If IsEmpty(cellValue) Or IsNull(cellValue) Or IsError(cellValue) Then
+        SafeValue = ""
     Else
-        CellToString = Trim(CStr(valeur))
+        SafeValue = Trim(CStr(cellValue))
     End If
 End Function
 
-Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
-                      ByVal commune As String, ByVal voie As String, ByVal motDirecteur As String, _
-                      ByVal ligne3 As String, ByVal libelleDistrict As String, _
-                      ByRef ligneResultat As Long, ByRef voiesTraitees() As Boolean, ByVal lastRow As Long)
+Sub TraiterVoieRapide(ByRef voie As Object, ByRef resultData As Variant, ByRef resultCount As Long)
+    ' Traitement optimisé d'une voie
     
-    ' Arrays simples pour collecter les données
-    ReDim tournees(1 To 100) As String
-    ReDim secables(1 To 100) As String
-    ReDim samedis(1 To 100) As String
-    ReDim numeros(1 To 1000) As Long
-    ReDim combinaisons(1 To 1000) As String
+    Dim lignes As Variant
+    lignes = voie("lignes")
     
-    Dim nbTournees As Long, nbSecables As Long, nbSamedis As Long, nbNumeros As Long
-    nbTournees = 0
-    nbSecables = 0
-    nbSamedis = 0
-    nbNumeros = 0
+    If UBound(lignes) < 0 Then Exit Sub ' Pas de lignes
     
-    ' Parcourir toutes les lignes pour cette voie
+    ' Dictionnaires pour regrouper par combinaison
+    Dim combinaisonsDict As Object
+    Set combinaisonsDict = CreateObject("Scripting.Dictionary")
+    
+    ' Analyser toutes les lignes de cette voie
     Dim i As Long
-    For i = 2 To lastRow
-        Dim communeLigne As String, voieLigne As String
-        communeLigne = CellToString(ws.Cells(i, 7))
-        voieLigne = CellToString(ws.Cells(i, 6))
+    For i = 0 To UBound(lignes)
+        Dim ligne As Object
+        Set ligne = lignes(i)
         
-        If communeLigne = commune And voieLigne = voie Then
-            ' Marquer cette ligne comme traitée
-            voiesTraitees(i) = True
+        Dim numero As Variant
+        numero = ligne("numero")
+        
+        ' Traiter seulement les numéros valides
+        If IsNumeric(numero) And numero > 0 Then
+            Dim numInt As Long
+            numInt = CLng(numero)
             
-            ' Lire les données de distribution
-            Dim tournee As String, secable As String, samedi As String
-            tournee = CellToString(ws.Cells(i, 1))
-            secable = CellToString(ws.Cells(i, 8))
-            samedi = CellToString(ws.Cells(i, 9))
+            Dim combinaison As String
+            combinaison = ligne("tournee") & "|" & ligne("secable") & "|" & ligne("samedi")
             
-            ' Collecter les données uniques ET les numéros avec leur combinaison
-            Dim numero As Variant
-            numero = ws.Cells(i, 4).Value
-            If IsNumeric(numero) And numero > 0 Then
-                ' SEULEMENT si le numéro est valide, on collecte tout
-                nbNumeros = nbNumeros + 1
-                numeros(nbNumeros) = CLng(numero)
-                combinaisons(nbNumeros) = tournee & "|" & secable & "|" & samedi
-                
-                ' Collecter tournées uniques
-                If tournee <> "" Then
-                    Dim trouveTournee As Boolean
-                    trouveTournee = False
-                    Dim j As Long
-                    For j = 1 To nbTournees
-                        If tournees(j) = tournee Then
-                            trouveTournee = True
-                            Exit For
-                        End If
-                    Next j
-                    If Not trouveTournee Then
-                        nbTournees = nbTournees + 1
-                        tournees(nbTournees) = tournee
-                    End If
-                End If
-                
-                ' Collecter sécables uniques
-                If secable <> "" Then
-                    Dim trouveSecable As Boolean
-                    trouveSecable = False
-                    For j = 1 To nbSecables
-                        If secables(j) = secable Then
-                            trouveSecable = True
-                            Exit For
-                        End If
-                    Next j
-                    If Not trouveSecable Then
-                        nbSecables = nbSecables + 1
-                        secables(nbSecables) = secable
-                    End If
-                End If
-                
-                ' Collecter samedis uniques
-                If samedi <> "" Then
-                    Dim trouveSamedi As Boolean
-                    trouveSamedi = False
-                    For j = 1 To nbSamedis
-                        If samedis(j) = samedi Then
-                            trouveSamedi = True
-                            Exit For
-                        End If
-                    Next j
-                    If Not trouveSamedi Then
-                        nbSamedis = nbSamedis + 1
-                        samedis(nbSamedis) = samedi
-                    End If
-                End If
+            ' Initialiser la combinaison si première fois
+            If Not combinaisonsDict.Exists(combinaison) Then
+                Dim comboInfo As Object
+                Set comboInfo = CreateObject("Scripting.Dictionary")
+                comboInfo("tournee") = ligne("tournee")
+                comboInfo("secable") = ligne("secable")
+                comboInfo("samedi") = ligne("samedi")
+                comboInfo("pairs") = Array()
+                comboInfo("impairs") = Array()
+                combinaisonsDict(combinaison) = comboInfo
+            End If
+            
+            ' Ajouter le numéro selon sa parité
+            Dim combo As Object
+            Set combo = combinaisonsDict(combinaison)
+            
+            If numInt Mod 2 = 0 Then
+                ' Numéro pair
+                Dim pairs As Variant
+                pairs = combo("pairs")
+                ReDim Preserve pairs(UBound(pairs) + 1)
+                pairs(UBound(pairs)) = numInt
+                combo("pairs") = pairs
+            Else
+                ' Numéro impair
+                Dim impairs As Variant
+                impairs = combo("impairs")
+                ReDim Preserve impairs(UBound(impairs) + 1)
+                impairs(UBound(impairs)) = numInt
+                combo("impairs") = impairs
             End If
         End If
     Next i
     
-    ' Ne traiter que si on a des numéros valides
-    If nbNumeros > 0 Then
-        ' Déterminer si la voie est complète
-        Dim estComplete As Boolean
-        estComplete = (nbTournees <= 1) And (nbSecables <= 1) And (nbSamedis <= 1)
+    ' Générer les lignes de résultat
+    If combinaisonsDict.Count = 0 Then Exit Sub ' Pas de numéros valides
+    
+    ' Déterminer si voie complète
+    Dim estComplete As Boolean
+    estComplete = (combinaisonsDict.Count = 1)
+    
+    Dim combKeys As Variant
+    combKeys = combinaisonsDict.Keys
+    
+    For i = 0 To UBound(combKeys)
+        Dim combKey As String
+        combKey = combKeys(i)
+        Dim comb As Object
+        Set comb = combinaisonsDict(combKey)
         
-        ' Récupérer les valeurs de référence
-        Dim tourneeRef As String, secableRef As String, samediRef As String
-        tourneeRef = ""
-        secableRef = ""
-        samediRef = ""
+        Dim pairsArray As Variant, impairsArray As Variant
+        pairsArray = comb("pairs")
+        impairsArray = comb("impairs")
         
-        If nbTournees > 0 Then tourneeRef = tournees(1)
-        If nbSecables > 0 Then secableRef = secables(1)
-        If nbSamedis > 0 Then samediRef = samedis(1)
+        Dim bornePairs As String, borneImpairs As String
+        bornePairs = ""
+        borneImpairs = ""
         
-        If estComplete Then
-            ' VOIE COMPLÈTE : Une ligne sans borne
-            wsCalcul.Cells(ligneResultat, 1) = commune
-            wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-            wsCalcul.Cells(ligneResultat, 3) = voie
-            wsCalcul.Cells(ligneResultat, 4) = ligne3
-            wsCalcul.Cells(ligneResultat, 5) = "" ' Pas de borne
-            wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-            wsCalcul.Cells(ligneResultat, 7) = tourneeRef
-            wsCalcul.Cells(ligneResultat, 8) = secableRef
-            wsCalcul.Cells(ligneResultat, 9) = samediRef
-            ligneResultat = ligneResultat + 1
-            
-        Else
-            ' VOIE PLURI-DISTRIBUÉE : Traiter par combinaison unique
-            ' Créer un array des combinaisons uniques QUI ONT DES NUMÉROS
-            ReDim combinaisonsUniques(1 To 100) As String
-            Dim nbCombinaisonsUniques As Long
-            nbCombinaisonsUniques = 0
-            
-            ' Ne collecter que les combinaisons qui ont des numéros
-            For i = 1 To nbNumeros
-                Dim combinaison As String
-                combinaison = combinaisons(i)
-                
-                ' Vérifier si cette combinaison existe déjà
-                Dim trouveComb As Boolean
-                trouveComb = False
-                For j = 1 To nbCombinaisonsUniques
-                    If combinaisonsUniques(j) = combinaison Then
-                        trouveComb = True
-                        Exit For
-                    End If
-                Next j
-                
-                If Not trouveComb Then
-                    nbCombinaisonsUniques = nbCombinaisonsUniques + 1
-                    combinaisonsUniques(nbCombinaisonsUniques) = combinaison
-                End If
-            Next i
-            
-            ' Traiter chaque combinaison unique (on sait qu'elles ont toutes des numéros)
-            For i = 1 To nbCombinaisonsUniques
-                combinaison = combinaisonsUniques(i)
-                
-                ' Extraire tournée, sécable, samedi de la combinaison
-                Dim parts() As String
-                parts = Split(combinaison, "|")
-                Dim tourneeCombo As String, secableCombo As String, samediCombo As String
-                tourneeCombo = ""
-                secableCombo = ""
-                samediCombo = ""
-                
-                If UBound(parts) >= 0 Then tourneeCombo = parts(0)
-                If UBound(parts) >= 1 Then secableCombo = parts(1)
-                If UBound(parts) >= 2 Then samediCombo = parts(2)
-                
-                ' Collecter les numéros de cette combinaison
-                ReDim numerosPairs(1 To 1000) As Long
-                ReDim numerosImpairs(1 To 1000) As Long
-                Dim nbPairs As Long, nbImpairs As Long
-                nbPairs = 0
-                nbImpairs = 0
-                
-                For j = 1 To nbNumeros
-                    If combinaisons(j) = combinaison Then
-                        If numeros(j) Mod 2 = 0 Then
-                            nbPairs = nbPairs + 1
-                            numerosPairs(nbPairs) = numeros(j)
-                        Else
-                            nbImpairs = nbImpairs + 1
-                            numerosImpairs(nbImpairs) = numeros(j)
-                        End If
-                    End If
-                Next j
-                
-                ' Calculer les bornes pairs et impairs
-                Dim bornePairs As String, borneImpairs As String
-                bornePairs = ""
-                borneImpairs = ""
-                
-                ' Calculer borne des pairs
-                If nbPairs > 0 Then
-                    Dim minPair As Long, maxPair As Long
-                    minPair = numerosPairs(1)
-                    maxPair = numerosPairs(1)
-                    
-                    For j = 2 To nbPairs
-                        If numerosPairs(j) < minPair Then minPair = numerosPairs(j)
-                        If numerosPairs(j) > maxPair Then maxPair = numerosPairs(j)
-                    Next j
-                    
-                    ' Si un seul numéro, pas de flèche
-                    If minPair = maxPair Then
-                        bornePairs = CStr(minPair)
-                    Else
-                        bornePairs = minPair & " à " & maxPair
-                    End If
-                End If
-                
-                ' Calculer borne des impairs
-                If nbImpairs > 0 Then
-                    Dim minImpair As Long, maxImpair As Long
-                    minImpair = numerosImpairs(1)
-                    maxImpair = numerosImpairs(1)
-                    
-                    For j = 2 To nbImpairs
-                        If numerosImpairs(j) < minImpair Then minImpair = numerosImpairs(j)
-                        If numerosImpairs(j) > maxImpair Then maxImpair = numerosImpairs(j)
-                    Next j
-                    
-                    ' Si un seul numéro, pas de flèche
-                    If minImpair = maxImpair Then
-                        borneImpairs = CStr(minImpair)
-                    Else
-                        borneImpairs = minImpair & " à " & maxImpair
-                    End If
-                End If
-                
-                ' Construire la borne combinée : "impairs / pairs"
-                Dim borneCombinee As String
-                If borneImpairs <> "" And bornePairs <> "" Then
-                    borneCombinee = borneImpairs & " / " & bornePairs
-                ElseIf borneImpairs <> "" Then
-                    borneCombinee = borneImpairs
-                ElseIf bornePairs <> "" Then
-                    borneCombinee = bornePairs
-                Else
-                    borneCombinee = ""
-                End If
-                
-                ' Écrire la ligne seulement si on a une borne
-                If borneCombinee <> "" Then
-                    wsCalcul.Cells(ligneResultat, 1) = commune
-                    wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-                    wsCalcul.Cells(ligneResultat, 3) = voie
-                    wsCalcul.Cells(ligneResultat, 4) = ligne3
-                    wsCalcul.Cells(ligneResultat, 5) = borneCombinee
-                    wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-                    wsCalcul.Cells(ligneResultat, 7) = tourneeCombo
-                    wsCalcul.Cells(ligneResultat, 8) = secableCombo
-                    wsCalcul.Cells(ligneResultat, 9) = samediCombo
-                    ligneResultat = ligneResultat + 1
-                End If
-            Next i
+        ' Calculer borne pairs
+        If UBound(pairsArray) >= 0 Then
+            Dim minPair As Long, maxPair As Long
+            Call TrouverMinMaxArray(pairsArray, minPair, maxPair)
+            If minPair = maxPair Then
+                bornePairs = CStr(minPair)
+            Else
+                bornePairs = minPair & " à " & maxPair
+            End If
         End If
-    End If
+        
+        ' Calculer borne impairs
+        If UBound(impairsArray) >= 0 Then
+            Dim minImpair As Long, maxImpair As Long
+            Call TrouverMinMaxArray(impairsArray, minImpair, maxImpair)
+            If minImpair = maxImpair Then
+                borneImpairs = CStr(minImpair)
+            Else
+                borneImpairs = minImpair & " à " & maxImpair
+            End If
+        End If
+        
+        ' Construire la borne combinée
+        Dim borneCombinee As String
+        If borneImpairs <> "" And bornePairs <> "" Then
+            borneCombinee = borneImpairs & " / " & bornePairs
+        ElseIf borneImpairs <> "" Then
+            borneCombinee = borneImpairs
+        ElseIf bornePairs <> "" Then
+            borneCombinee = bornePairs
+        Else
+            borneCombinee = ""
+        End If
+        
+        ' Ajouter la ligne au résultat seulement si on a une borne
+        If borneCombinee <> "" Then
+            resultCount = resultCount + 1
+            
+            ' Voie complète = pas de borne
+            If estComplete Then
+                resultData(resultCount, 5) = ""
+            Else
+                resultData(resultCount, 5) = borneCombinee
+            End If
+            
+            resultData(resultCount, 1) = voie("commune")
+            resultData(resultCount, 2) = voie("motDirecteur")
+            resultData(resultCount, 3) = voie("voie")
+            resultData(resultCount, 4) = voie("ligne3")
+            resultData(resultCount, 6) = voie("libelleDistrict")
+            resultData(resultCount, 7) = comb("tournee")
+            resultData(resultCount, 8) = comb("secable")
+            resultData(resultCount, 9) = comb("samedi")
+        End If
+    Next i
+End Sub
+
+Sub TrouverMinMaxArray(ByRef arr As Variant, ByRef minVal As Long, ByRef maxVal As Long)
+    ' Fonction rapide pour trouver min/max
+    If UBound(arr) < 0 Then Exit Sub
+    
+    minVal = CLng(arr(0))
+    maxVal = CLng(arr(0))
+    
+    Dim i As Long
+    For i = 1 To UBound(arr)
+        Dim val As Long
+        val = CLng(arr(i))
+        If val < minVal Then minVal = val
+        If val > maxVal Then maxVal = val
+    Next i
 End Sub
