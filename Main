@@ -1,66 +1,145 @@
 Sub CalculerBornes()
     '=========================================================================
-    ' MACRO CALCUL DES BORNES - VERSION AVEC DEBUG
+    ' VERSION DEBUG ULTRA-DÉTAILLÉE
+    ' Cette version va nous dire exactement où ça bloque
     '=========================================================================
     
     Dim ws As Worksheet
     Dim wsCalcul As Worksheet
-    Dim lastRow As Long
-    Dim i As Long
-    Dim currentRow As Long
-    
-    ' Arrays pour stocker les données
-    Dim dataArray As Variant
-    Dim resultArray() As Variant
-    Dim resultCount As Long
+    Dim debugInfo As String
     
     On Error GoTo ErrorHandler
     
-    ' 1. IDENTIFICATION DE LA FEUILLE SOURCE
+    debugInfo = "=== DÉBUT DU DEBUG ===" & vbCrLf
+    
+    ' 1. LISTER TOUTES LES FEUILLES
     '=========================================================================
-    Application.ScreenUpdating = False
-    Application.DisplayAlerts = False
+    debugInfo = debugInfo & "Feuilles dans le classeur :" & vbCrLf
+    Dim wsCount As Long
+    wsCount = 0
     
-    Set ws = Nothing
     Dim wsTemp As Worksheet
-    Dim debugMsg As String
-    
-    ' Debug : lister toutes les feuilles
-    debugMsg = "Feuilles disponibles :" & vbCrLf
     For Each wsTemp In ThisWorkbook.Worksheets
-        debugMsg = debugMsg & "- " & wsTemp.Name & vbCrLf
-        If wsTemp.Name <> "Calcul des bornes" Then
-            ' Vérifier les en-têtes de cette feuille
-            Dim header1 As String, header4 As String, header6 As String
-            On Error Resume Next
-            header1 = Trim(UCase(CStr(wsTemp.Cells(1, 1).Value)))
-            header4 = Trim(UCase(CStr(wsTemp.Cells(1, 4).Value)))
-            header6 = Trim(UCase(CStr(wsTemp.Cells(1, 6).Value)))
-            On Error GoTo ErrorHandler
-            
-            debugMsg = debugMsg & "  En-têtes: " & header1 & " | " & header4 & " | " & header6 & vbCrLf
-            
-            ' Critères de détection plus flexibles
-            If (InStr(header1, "TOURN") > 0 Or header1 = "TOURNÉE") And _
-               (InStr(header4, "NUM") > 0 Or header4 = "NUMÉRO") And _
-               (InStr(header6, "VOIE") > 0) Then
+        wsCount = wsCount + 1
+        debugInfo = debugInfo & wsCount & ". " & wsTemp.Name
+        
+        ' Vérifier les en-têtes
+        On Error Resume Next
+        Dim h1 As String, h2 As String, h3 As String, h4 As String, h5 As String, h6 As String, h7 As String, h8 As String, h9 As String
+        h1 = wsTemp.Cells(1, 1).Value
+        h2 = wsTemp.Cells(1, 2).Value
+        h3 = wsTemp.Cells(1, 3).Value
+        h4 = wsTemp.Cells(1, 4).Value
+        h5 = wsTemp.Cells(1, 5).Value
+        h6 = wsTemp.Cells(1, 6).Value
+        h7 = wsTemp.Cells(1, 7).Value
+        h8 = wsTemp.Cells(1, 8).Value
+        h9 = wsTemp.Cells(1, 9).Value
+        On Error GoTo ErrorHandler
+        
+        debugInfo = debugInfo & " -> En-têtes: " & h1 & "|" & h2 & "|" & h3 & "|" & h4 & "|" & h5 & "|" & h6 & "|" & h7 & "|" & h8 & "|" & h9 & vbCrLf
+        
+        ' Choisir cette feuille si elle a les bonnes colonnes
+        If wsTemp.Name <> "Calcul des bornes" And ws Is Nothing Then
+            If (h1 Like "*ournée*" Or h1 Like "*ourn*" Or h1 = "Tournée") And _
+               (h4 Like "*uméro*" Or h4 Like "*um*" Or h4 = "Numéro") And _
+               (h6 Like "*oie*" Or h6 = "Voie") And _
+               (h7 Like "*ommune*" Or h7 = "Commune") Then
                 Set ws = wsTemp
-                debugMsg = debugMsg & "  *** FEUILLE SÉLECTIONNÉE ***" & vbCrLf
-                Exit For
+                debugInfo = debugInfo & "    *** FEUILLE SÉLECTIONNÉE ***" & vbCrLf
             End If
         End If
     Next wsTemp
     
     If ws Is Nothing Then
-        MsgBox debugMsg & vbCrLf & "Aucune feuille source trouvée !", vbCritical
-        GoTo CleanUp
+        MsgBox debugInfo & vbCrLf & "PROBLÈME: Aucune feuille source trouvée !", vbCritical
+        Exit Sub
     End If
     
-    ' 2. SUPPRESSION ET CRÉATION DE LA FEUILLE RÉSULTAT
+    debugInfo = debugInfo & vbCrLf & "Feuille source choisie: " & ws.Name & vbCrLf
+    
+    ' 2. ANALYSER LES DONNÉES DE LA FEUILLE SOURCE
     '=========================================================================
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    debugInfo = debugInfo & "Dernière ligne avec données: " & lastRow & vbCrLf
+    
+    If lastRow < 2 Then
+        MsgBox debugInfo & vbCrLf & "PROBLÈME: Pas de données (lastRow < 2)", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Analyser les 10 premières lignes de données
+    debugInfo = debugInfo & vbCrLf & "Analyse des premières lignes:" & vbCrLf
+    Dim i As Long
+    For i = 2 To WorksheetFunction.Min(11, lastRow)
+        Dim ligne As String
+        ligne = "Ligne " & i & ": "
+        
+        Dim j As Long
+        For j = 1 To 9
+            On Error Resume Next
+            Dim cellValue As String
+            cellValue = CStr(ws.Cells(i, j).Value)
+            If Err.Number <> 0 Then cellValue = "[ERREUR]"
+            ligne = ligne & cellValue & "|"
+            On Error GoTo ErrorHandler
+        Next j
+        
+        debugInfo = debugInfo & ligne & vbCrLf
+    Next i
+    
+    ' 3. COMPTER LES LIGNES VALIDES
+    '=========================================================================
+    Dim lignesValides As Long
+    Dim voiesUniques As Object
+    Set voiesUniques = CreateObject("Scripting.Dictionary")
+    
+    lignesValides = 0
+    
+    For i = 2 To lastRow
+        On Error Resume Next
+        Dim tournee As String, commune As String, voie As String
+        tournee = Trim(CStr(ws.Cells(i, 1).Value))
+        commune = Trim(CStr(ws.Cells(i, 7).Value))
+        voie = Trim(CStr(ws.Cells(i, 6).Value))
+        On Error GoTo ErrorHandler
+        
+        If tournee <> "" And commune <> "" And voie <> "" Then
+            lignesValides = lignesValides + 1
+            Dim cleVoie As String
+            cleVoie = commune & "###" & voie
+            
+            If Not voiesUniques.Exists(cleVoie) Then
+                voiesUniques(cleVoie) = lignesValides
+            End If
+        End If
+    Next i
+    
+    debugInfo = debugInfo & vbCrLf & "Lignes valides trouvées: " & lignesValides & vbCrLf
+    debugInfo = debugInfo & "Voies uniques trouvées: " & voiesUniques.Count & vbCrLf
+    
+    If voiesUniques.Count = 0 Then
+        MsgBox debugInfo & vbCrLf & "PROBLÈME: Aucune voie valide trouvée !" & vbCrLf & _
+               "Vérifiez que les colonnes Tournée, Commune et Voie contiennent des données.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Lister quelques voies trouvées
+    debugInfo = debugInfo & vbCrLf & "Exemples de voies trouvées:" & vbCrLf
+    Dim voiesKeys As Variant
+    voiesKeys = voiesUniques.Keys
+    For i = 0 To WorksheetFunction.Min(4, UBound(voiesKeys))
+        debugInfo = debugInfo & "- " & voiesKeys(i) & vbCrLf
+    Next i
+    
+    ' 4. CRÉER LA FEUILLE RÉSULTAT
+    '=========================================================================
+    Application.DisplayAlerts = False
     On Error Resume Next
     ThisWorkbook.Worksheets("Calcul des bornes").Delete
     On Error GoTo ErrorHandler
+    Application.DisplayAlerts = True
     
     Set wsCalcul = ThisWorkbook.Worksheets.Add
     wsCalcul.Name = "Calcul des bornes"
@@ -81,289 +160,147 @@ Sub CalculerBornes()
         .Range("A1:I1").Interior.Color = RGB(180, 198, 231)
     End With
     
-    ' 3. LECTURE DES DONNÉES
+    debugInfo = debugInfo & vbCrLf & "Feuille 'Calcul des bornes' créée." & vbCrLf
+    
+    ' 5. TRAITEMENT ULTRA-SIMPLIFIÉ
     '=========================================================================
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    debugMsg = debugMsg & vbCrLf & "Feuille: " & ws.Name & vbCrLf & "Dernière ligne: " & lastRow
+    Dim ligneResultat As Long
+    ligneResultat = 2
     
-    If lastRow < 2 Then
-        MsgBox debugMsg & vbCrLf & "Aucune donnée trouvée (lastRow < 2).", vbExclamation
-        GoTo CleanUp
-    End If
-    
-    ' Lire toutes les données d'un coup
-    dataArray = ws.Range("A2:I" & lastRow).Value
-    debugMsg = debugMsg & vbCrLf & "Données lues: " & UBound(dataArray, 1) & " lignes"
-    
-    ' Debug : afficher quelques premières lignes
-    debugMsg = debugMsg & vbCrLf & "Échantillon de données:"
-    For i = 1 To WorksheetFunction.Min(3, UBound(dataArray, 1))
-        debugMsg = debugMsg & vbCrLf & "Ligne " & i & ": " & _
-                   SafeString(dataArray(i, 1)) & " | " & _
-                   SafeString(dataArray(i, 6)) & " | " & _
-                   SafeString(dataArray(i, 7))
+    ' Traiter chaque voie une par une
+    For i = 0 To UBound(voiesKeys)
+        Call TraiterVoieDebug(voiesKeys(i), ws, wsCalcul, ligneResultat, debugInfo)
     Next i
     
-    ' Initialiser le tableau de résultats
-    ReDim resultArray(1 To (lastRow - 1) * 3, 1 To 9)
-    resultCount = 0
+    Dim nbResultats As Long
+    nbResultats = ligneResultat - 2
     
-    ' 4. TRAITEMENT SIMPLIFIÉ LIGNE PAR LIGNE
-    '=========================================================================
-    Dim voiesTraitees As Object
-    Set voiesTraitees = CreateObject("Scripting.Dictionary")
+    debugInfo = debugInfo & vbCrLf & "RÉSULTATS FINAUX:" & vbCrLf
+    debugInfo = debugInfo & "- Voies traitées: " & voiesUniques.Count & vbCrLf
+    debugInfo = debugInfo & "- Lignes de résultat: " & nbResultats & vbCrLf
     
-    ' Compter les lignes valides
-    Dim lignesValides As Long
-    lignesValides = 0
-    
-    ' Premier passage : identifier les voies uniques
-    For i = 1 To UBound(dataArray, 1)
-        Dim tournee As String, commune As String, voie As String
-        Dim motDirecteur As String
-        
-        ' Lecture sécurisée
-        tournee = SafeString(dataArray(i, 1))
-        commune = SafeString(dataArray(i, 7))
-        voie = SafeString(dataArray(i, 6))
-        motDirecteur = SafeString(dataArray(i, 5))
-        
-        If tournee <> "" And commune <> "" And voie <> "" Then
-            lignesValides = lignesValides + 1
-            Dim cleVoie As String
-            cleVoie = commune & "§" & voie & "§" & motDirecteur
-            
-            If Not voiesTraitees.Exists(cleVoie) Then
-                voiesTraitees(cleVoie) = i
-            End If
-        End If
-    Next i
-    
-    debugMsg = debugMsg & vbCrLf & "Lignes valides: " & lignesValides
-    debugMsg = debugMsg & vbCrLf & "Voies uniques: " & voiesTraitees.Count
-    
-    If voiesTraitees.Count = 0 Then
-        MsgBox debugMsg & vbCrLf & vbCrLf & "Aucune voie valide trouvée ! Vérifiez les colonnes Tournée, Commune, Voie.", vbExclamation
-        GoTo CleanUp
-    End If
-    
-    ' Deuxième passage : traiter chaque voie unique
-    Dim voiesKeys As Variant
-    voiesKeys = voiesTraitees.Keys
-    
-    Dim j As Long
-    For j = 0 To UBound(voiesKeys)
-        cleVoie = voiesKeys(j)
-        Call TraiterUneVoieSimple(cleVoie, dataArray, resultArray, resultCount)
-    Next j
-    
-    debugMsg = debugMsg & vbCrLf & "Lignes de résultat générées: " & resultCount
-    
-    ' 5. ÉCRITURE DES RÉSULTATS
-    '=========================================================================
-    If resultCount > 0 Then
-        For i = 1 To resultCount
-            For j = 1 To 9
-                wsCalcul.Cells(i + 1, j).Value = resultArray(i, j)
-            Next j
-        Next i
-    End If
-    
-    ' Mise en forme
+    ' Mise en forme finale
     With wsCalcul
         .Columns("A:I").AutoFit
-        If resultCount > 0 Then
-            .Range("A1:I" & (resultCount + 1)).Borders.LineStyle = xlContinuous
+        If nbResultats > 0 Then
+            .Range("A1:I" & ligneResultat - 1).Borders.LineStyle = xlContinuous
         End If
         .Range("A1:I1").HorizontalAlignment = xlCenter
         .Range("A1").Select
     End With
     
-    ' Message final avec debug
-    MsgBox debugMsg & vbCrLf & vbCrLf & "RÉSULTAT: " & resultCount & " lignes générées.", vbInformation
-    GoTo CleanUp
+    ' Message final
+    MsgBox debugInfo & vbCrLf & "=== FIN DU DEBUG ===", vbInformation
+    
+    Exit Sub
     
 ErrorHandler:
-    MsgBox "Erreur ligne " & i & " : " & Err.Description & " (N°" & Err.Number & ")" & vbCrLf & vbCrLf & debugMsg, vbCritical
-    
-CleanUp:
-    Application.ScreenUpdating = True
-    Application.DisplayAlerts = True
+    MsgBox "ERREUR: " & Err.Description & " (Ligne " & Erl & ")" & vbCrLf & vbCrLf & debugInfo, vbCritical
 End Sub
 
-'=========================================================================
-' FONCTIONS AUXILIAIRES SIMPLIFIÉES
-'=========================================================================
-
-Function SafeString(ByVal cellValue As Variant) As String
-    On Error Resume Next
-    If IsEmpty(cellValue) Or IsNull(cellValue) Or VarType(cellValue) = vbError Then
-        SafeString = ""
-    Else
-        SafeString = Trim(CStr(cellValue))
-        If SafeString = "0" Then SafeString = ""
-    End If
-    On Error GoTo 0
-End Function
-
-Sub TraiterUneVoieSimple(ByVal cleVoie As String, ByRef dataArray As Variant, ByRef resultArray As Variant, ByRef resultCount As Long)
-    On Error GoTo ErreurTraitement
+Sub TraiterVoieDebug(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, ByRef ligneResultat As Long, ByRef debugInfo As String)
+    On Error GoTo ErreurVoie
     
-    ' Extraire les informations de la clé
+    ' Extraire commune et voie de la clé
     Dim parts As Variant
-    parts = Split(cleVoie, "§")
-    If UBound(parts) < 2 Then Exit Sub
+    parts = Split(cleVoie, "###")
+    If UBound(parts) < 1 Then Exit Sub
     
-    Dim commune As String, voie As String, motDirecteur As String
+    Dim commune As String, voie As String
     commune = parts(0)
     voie = parts(1)
-    motDirecteur = parts(2)
     
-    ' Variables pour analyser la voie
+    ' Trouver toutes les lignes de cette voie
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    ' Variables pour cette voie
+    Dim premiereLigne As Long
     Dim tournees As New Collection
-    Dim secables As New Collection
-    Dim samedis As New Collection
     Dim numeros As New Collection
+    premiereLigne = -1
     
-    ' Variables de référence pour la première ligne trouvée
-    Dim ligne3 As String, libelleDistrict As String
-    Dim tourneeRef As String, secableRef As String, samediRef As String
-    Dim premiereIteration As Boolean
-    premiereIteration = True
-    
-    ' Collecter toutes les informations de cette voie
     Dim i As Long
-    For i = 1 To UBound(dataArray, 1)
-        If SafeString(dataArray(i, 7)) = commune And _
-           SafeString(dataArray(i, 6)) = voie And _
-           SafeString(dataArray(i, 5)) = motDirecteur Then
+    For i = 2 To lastRow
+        On Error Resume Next
+        Dim communeLigne As String, voieLigne As String, tourneeLigne As String
+        communeLigne = Trim(CStr(ws.Cells(i, 7).Value))
+        voieLigne = Trim(CStr(ws.Cells(i, 6).Value))
+        tourneeLigne = Trim(CStr(ws.Cells(i, 1).Value))
+        On Error GoTo ErreurVoie
+        
+        If communeLigne = commune And voieLigne = voie Then
+            If premiereLigne = -1 Then premiereLigne = i
             
-            ' Première ligne : récupérer les valeurs de référence
-            If premiereIteration Then
-                ligne3 = SafeString(dataArray(i, 3))
-                libelleDistrict = SafeString(dataArray(i, 2))
-                premiereIteration = False
+            ' Collecter tournées uniques
+            If tourneeLigne <> "" Then
+                On Error Resume Next
+                Dim temp As String
+                temp = tournees(tourneeLigne)
+                If Err.Number <> 0 Then
+                    tournees.Add tourneeLigne, tourneeLigne
+                End If
+                On Error GoTo ErreurVoie
             End If
             
-            ' Collecter les valeurs pour déterminer si la voie est complète
-            Dim t As String, s As String, sam As String
-            t = SafeString(dataArray(i, 1))
-            s = SafeString(dataArray(i, 8))
-            sam = SafeString(dataArray(i, 9))
-            
-            If t <> "" Then
-                Call AjouterSiNouveau(tournees, t)
-                tourneeRef = t ' Garder la dernière valeur comme référence
-            End If
-            If s <> "" Then
-                Call AjouterSiNouveau(secables, s)
-                secableRef = s
-            End If
-            If sam <> "" Then
-                Call AjouterSiNouveau(samedis, sam)
-                samediRef = sam
-            End If
-            
-            ' Collecter les numéros valides
+            ' Collecter numéros
             Dim numero As Variant
-            numero = dataArray(i, 4)
-            If IsNumeric(numero) And numero <> "" And numero > 0 Then
+            numero = ws.Cells(i, 4).Value
+            If IsNumeric(numero) And numero > 0 Then
                 numeros.Add CLng(numero)
             End If
         End If
     Next i
     
-    ' Déterminer si la voie est complète
-    Dim estComplete As Boolean
-    estComplete = (tournees.Count = 1) And (secables.Count <= 1) And (samedis.Count <= 1)
+    If premiereLigne = -1 Then Exit Sub
     
-    If estComplete Then
-        ' Voie complète : une ligne sans borne
-        resultCount = resultCount + 1
-        resultArray(resultCount, 1) = commune
-        resultArray(resultCount, 2) = motDirecteur
-        resultArray(resultCount, 3) = voie
-        resultArray(resultCount, 4) = ligne3
-        resultArray(resultCount, 5) = "" ' Pas de borne
-        resultArray(resultCount, 6) = libelleDistrict
-        resultArray(resultCount, 7) = tourneeRef
-        resultArray(resultCount, 8) = secableRef
-        resultArray(resultCount, 9) = samediRef
-    Else
-        ' Voie incomplète : séparer pairs et impairs
-        If numeros.Count > 0 Then
-            Dim pairs As New Collection
-            Dim impairs As New Collection
+    ' Récupérer les données de référence
+    On Error Resume Next
+    Dim motDirecteur As String, ligne3 As String, libelleDistrict As String
+    Dim secable As String, samedi As String, tourneeRef As String
+    
+    motDirecteur = Trim(CStr(ws.Cells(premiereLigne, 5).Value))
+    ligne3 = Trim(CStr(ws.Cells(premiereLigne, 3).Value))
+    libelleDistrict = Trim(CStr(ws.Cells(premiereLigne, 2).Value))
+    secable = Trim(CStr(ws.Cells(premiereLigne, 8).Value))
+    samedi = Trim(CStr(ws.Cells(premiereLigne, 9).Value))
+    tourneeRef = Trim(CStr(ws.Cells(premiereLigne, 1).Value))
+    On Error GoTo ErreurVoie
+    
+    ' Écrire le résultat (version simplifiée : une ligne par voie)
+    With wsCalcul
+        .Cells(ligneResultat, 1) = commune
+        .Cells(ligneResultat, 2) = motDirecteur
+        .Cells(ligneResultat, 3) = voie
+        .Cells(ligneResultat, 4) = ligne3
+        
+        ' Calculer la borne si nécessaire
+        If numeros.Count > 1 Then
+            Dim minNum As Long, maxNum As Long
+            minNum = numeros(1)
+            maxNum = numeros(1)
             
-            For i = 1 To numeros.Count
-                If numeros(i) Mod 2 = 0 Then
-                    pairs.Add numeros(i)
-                Else
-                    impairs.Add numeros(i)
-                End If
-            Next i
+            Dim j As Long
+            For j = 2 To numeros.Count
+                If numeros(j) < minNum Then minNum = numeros(j)
+                If numeros(j) > maxNum Then maxNum = numeros(j)
+            Next j
             
-            ' Générer ligne pour les pairs
-            If pairs.Count > 0 Then
-                Dim minPair As Long, maxPair As Long
-                Call TrouverMinMax(pairs, minPair, maxPair)
-                
-                resultCount = resultCount + 1
-                resultArray(resultCount, 1) = commune
-                resultArray(resultCount, 2) = motDirecteur
-                resultArray(resultCount, 3) = voie
-                resultArray(resultCount, 4) = ligne3
-                resultArray(resultCount, 5) = minPair & " → " & maxPair
-                resultArray(resultCount, 6) = libelleDistrict
-                resultArray(resultCount, 7) = tourneeRef
-                resultArray(resultCount, 8) = secableRef
-                resultArray(resultCount, 9) = samediRef
-            End If
-            
-            ' Générer ligne pour les impairs
-            If impairs.Count > 0 Then
-                Dim minImpair As Long, maxImpair As Long
-                Call TrouverMinMax(impairs, minImpair, maxImpair)
-                
-                resultCount = resultCount + 1
-                resultArray(resultCount, 1) = commune
-                resultArray(resultCount, 2) = motDirecteur
-                resultArray(resultCount, 3) = voie
-                resultArray(resultCount, 4) = ligne3
-                resultArray(resultCount, 5) = minImpair & " → " & maxImpair
-                resultArray(resultCount, 6) = libelleDistrict
-                resultArray(resultCount, 7) = tourneeRef
-                resultArray(resultCount, 8) = secableRef
-                resultArray(resultCount, 9) = samediRef
-            End If
+            .Cells(ligneResultat, 5) = minNum & " → " & maxNum
+        Else
+            .Cells(ligneResultat, 5) = "" ' Voie complète
         End If
-    End If
+        
+        .Cells(ligneResultat, 6) = libelleDistrict
+        .Cells(ligneResultat, 7) = tourneeRef
+        .Cells(ligneResultat, 8) = secable
+        .Cells(ligneResultat, 9) = samedi
+    End With
+    
+    ligneResultat = ligneResultat + 1
     
     Exit Sub
     
-ErreurTraitement:
-    ' Ignorer les erreurs sur cette voie et continuer
-End Sub
-
-Sub AjouterSiNouveau(ByRef col As Collection, ByVal valeur As String)
-    On Error Resume Next
-    Dim temp As String
-    temp = col(valeur)
-    If Err.Number <> 0 Then
-        col.Add valeur, valeur
-    End If
-    On Error GoTo 0
-End Sub
-
-Sub TrouverMinMax(ByRef col As Collection, ByRef minVal As Long, ByRef maxVal As Long)
-    If col.Count = 0 Then Exit Sub
-    
-    minVal = col(1)
-    maxVal = col(1)
-    
-    Dim i As Long
-    For i = 2 To col.Count
-        If col(i) < minVal Then minVal = col(i)
-        If col(i) > maxVal Then maxVal = col(i)
-    Next i
+ErreurVoie:
+    debugInfo = debugInfo & "Erreur sur voie: " & cleVoie & " - " & Err.Description & vbCrLf
 End Sub
