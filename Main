@@ -114,7 +114,7 @@ Sub CalculerBornes()
     wsCalcul.Range("A1:I1").Font.Bold = True
     wsCalcul.Range("A1:I1").Interior.Color = RGB(180, 198, 231)
     
-    ' 5. TRAITEMENT ULTRA-RAPIDE DES VOIES GROUPÉES
+    ' 5. TRAITEMENT ULTRA-RAPIDE PAR PARCOURS SÉQUENTIEL
     '=========================================================================
     ReDim resultArray(1 To processedCount, 1 To 9)  ' Maximum possible
     resultCount = 0
@@ -124,18 +124,30 @@ Sub CalculerBornes()
         Dim voieActuelle As String
         voieActuelle = CStr(finalProcessedData(i, 1))
         
-        ' Trouver la fin de cette voie
-        Dim finVoie As Long
-        finVoie = i
-        Do While finVoie < processedCount
-            If CStr(finalProcessedData(finVoie + 1, 1)) <> voieActuelle Then Exit Do
-            finVoie = finVoie + 1
-        Loop
+        ' Collecter toutes les lignes de cette voie
+        Dim lignesVoie() As Long
+        Dim nbLignesVoie As Long
+        ReDim lignesVoie(1 To processedCount)
+        nbLignesVoie = 0
         
-        ' Traiter cette voie (de i à finVoie)
-        Call TraiterVoieUltraRapide(finalProcessedData, i, finVoie, resultArray, resultCount)
+        ' Parcourir et collecter les lignes de cette voie
+        Dim j As Long
+        For j = i To processedCount
+            If CStr(finalProcessedData(j, 1)) = voieActuelle Then
+                nbLignesVoie = nbLignesVoie + 1
+                lignesVoie(nbLignesVoie) = j
+            Else
+                Exit For ' Voie suivante trouvée
+            End If
+        Next j
         
-        i = finVoie + 1
+        ' Traiter cette voie
+        If nbLignesVoie > 0 Then
+            Call TraiterVoieUltraRapide2(finalProcessedData, lignesVoie, nbLignesVoie, resultArray, resultCount)
+            i = i + nbLignesVoie ' Passer à la voie suivante
+        Else
+            i = i + 1
+        End If
     Loop
     
     ' 6. ÉCRITURE MASSIVE FINALE
@@ -171,19 +183,23 @@ Function CleanString(ByVal val As Variant) As String
     End If
 End Function
 
-Sub TraiterVoieUltraRapide(ByRef data As Variant, ByVal debut As Long, ByVal fin As Long, ByRef resultArray As Variant, ByRef resultCount As Long)
-    ' Traitement optimisé d'une voie déjà triée
+Sub TraiterVoieUltraRapide2(ByRef data As Variant, ByRef lignesVoie As Variant, ByVal nbLignes As Long, ByRef resultArray As Variant, ByRef resultCount As Long)
+    ' Traitement optimisé d'une voie avec indices de lignes
+    
+    If nbLignes = 0 Then Exit Sub
     
     ' Compter les combinaisons uniques
     Dim combinaisonsUniques() As String
     Dim nbCombos As Long
-    ReDim combinaisonsUniques(1 To fin - debut + 1)
+    ReDim combinaisonsUniques(1 To nbLignes)
     nbCombos = 0
     
     Dim i As Long
-    For i = debut To fin
+    For i = 1 To nbLignes
+        Dim ligne As Long
+        ligne = lignesVoie(i)
         Dim combo As String
-        combo = CStr(data(i, 10))  ' combinaison précalculée
+        combo = CStr(data(ligne, 10))  ' combinaison précalculée
         
         ' Vérifier si nouvelle combinaison
         Dim estNouveau As Boolean
@@ -214,8 +230,8 @@ Sub TraiterVoieUltraRapide(ByRef data As Variant, ByVal debut As Long, ByVal fin
         ' Collecter les numéros de cette combinaison
         Dim pairs() As Long, impairs() As Long
         Dim nbPairs As Long, nbImpairs As Long
-        ReDim pairs(1 To fin - debut + 1)
-        ReDim impairs(1 To fin - debut + 1)
+        ReDim pairs(1 To nbLignes)
+        ReDim impairs(1 To nbLignes)
         nbPairs = 0
         nbImpairs = 0
         
@@ -226,28 +242,29 @@ Sub TraiterVoieUltraRapide(ByRef data As Variant, ByVal debut As Long, ByVal fin
         Dim premierTrouve As Boolean
         premierTrouve = False
         
-        For i = debut To fin
-            If CStr(data(i, 10)) = comboActuelle Then
+        For i = 1 To nbLignes
+            ligne = lignesVoie(i)
+            If CStr(data(ligne, 10)) = comboActuelle Then
                 ' Récupérer les infos de référence
                 If Not premierTrouve Then
-                    refTournee = CStr(data(i, 2))
-                    refSecable = CStr(data(i, 3))
-                    refSamedi = CStr(data(i, 4))
+                    refTournee = CStr(data(ligne, 2))
+                    refSecable = CStr(data(ligne, 3))
+                    refSamedi = CStr(data(ligne, 4))
                     
                     Dim voieParts As Variant
-                    voieParts = Split(CStr(data(i, 1)), "|")
+                    voieParts = Split(CStr(data(ligne, 1)), "|")
                     refCommune = voieParts(0)
                     refVoie = voieParts(1)
                     
-                    refMotDirecteur = CStr(data(i, 7))
-                    refLigne3 = CStr(data(i, 8))
-                    refLibelleDistrict = CStr(data(i, 9))
+                    refMotDirecteur = CStr(data(ligne, 7))
+                    refLigne3 = CStr(data(ligne, 8))
+                    refLibelleDistrict = CStr(data(ligne, 9))
                     premierTrouve = True
                 End If
                 
                 ' Collecter le numéro selon sa parité
                 Dim numero As Long
-                numero = CLng(data(i, 5))
+                numero = CLng(data(ligne, 5))
                 If numero Mod 2 = 0 Then
                     nbPairs = nbPairs + 1
                     pairs(nbPairs) = numero
