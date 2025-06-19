@@ -1,30 +1,67 @@
 Sub CalculerBornes()
-    On Error GoTo ErrorHandler
+    '=========================================================================
+    ' MACRO CALCUL DES BORNES - INDICATEUR TG
+    ' Auteur: Développé selon les spécifications fournies
+    ' Date: Juin 2025
+    ' 
+    ' Objectif: Calculer les bornes de numéros pour chaque voie selon les règles:
+    ' - Si voie complète (même Tournée, Sécable, Samedi) -> une ligne sans borne
+    ' - Sinon -> calcul des bornes séparément pour pairs et impairs
+    '=========================================================================
     
-    Dim wsSource As Worksheet
-    Dim wsResult As Worksheet
+    Dim ws As Worksheet
+    Dim wsCalcul As Worksheet
     Dim lastRow As Long
     Dim i As Long
-    Dim resultRow As Long
-    Dim errorLine As Long
-    errorLine = 0
+    Dim currentRow As Long
     
-    ' 1. Identifier la feuille source
-    Set wsSource = ThisWorkbook.Worksheets(1)
+    ' Dictionnaires pour regrouper les données
+    Dim voiesData As Object
+    Set voiesData = CreateObject("Scripting.Dictionary")
     
-    ' 2. Supprimer la feuille "Calcul des bornes" si elle existe
+    ' Variables pour la ligne en cours
+    Dim commune As String, motDirecteur As String, voie As String, ligne3 As String
+    Dim numero As Variant, libelleDistrict As String, tournee As String
+    Dim secable As String, samedi As String
+    Dim cleVoie As String
+    
+    On Error GoTo ErrorHandler
+    
+    ' 1. IDENTIFICATION DE LA FEUILLE SOURCE
+    '=========================================================================
+    ' Chercher la feuille principale (peut avoir différents noms)
+    Set ws = Nothing
+    For Each ws In ThisWorkbook.Worksheets
+        If ws.Name <> "Calcul des bornes" Then
+            ' Vérifier si cette feuille contient les bonnes colonnes
+            If ws.Cells(1, 1).Value = "Tournée" And _
+               ws.Cells(1, 4).Value = "Numéro" And _
+               ws.Cells(1, 6).Value = "Voie" Then
+                Exit For
+            End If
+        End If
+    Next ws
+    
+    If ws Is Nothing Then
+        MsgBox "Impossible de trouver la feuille source avec les colonnes requises.", vbCritical
+        Exit Sub
+    End If
+    
+    ' 2. SUPPRESSION ET CRÉATION DE LA FEUILLE "Calcul des bornes"
+    '=========================================================================
     Application.DisplayAlerts = False
+    
+    ' Supprimer la feuille si elle existe
     On Error Resume Next
     ThisWorkbook.Worksheets("Calcul des bornes").Delete
     On Error GoTo ErrorHandler
-    Application.DisplayAlerts = True
     
-    ' 3. Créer la nouvelle feuille "Calcul des bornes"
-    Set wsResult = ThisWorkbook.Worksheets.Add
-    wsResult.Name = "Calcul des bornes"
+    ' Créer la nouvelle feuille
+    Set wsCalcul = ThisWorkbook.Worksheets.Add
+    wsCalcul.Name = "Calcul des bornes"
     
-    ' 4. Créer les en-têtes
-    With wsResult
+    ' Créer les en-têtes selon les spécifications exactes
+    With wsCalcul
         .Cells(1, 1).Value = "Commune"
         .Cells(1, 2).Value = "Mot directeur"
         .Cells(1, 3).Value = "Libelle de voie"
@@ -35,342 +72,260 @@ Sub CalculerBornes()
         .Cells(1, 8).Value = "Sécable"
         .Cells(1, 9).Value = "Samedi"
         
-        ' Formatage des en-têtes
+        ' Mise en forme des en-têtes
         .Range("A1:I1").Font.Bold = True
-        .Range("A1:I1").Interior.Color = RGB(220, 220, 220)
+        .Range("A1:I1").Interior.Color = RGB(180, 198, 231)
+        .Range("A1:I1").Borders.LineStyle = xlContinuous
     End With
     
-    ' 5. Déterminer la dernière ligne avec des données
-    lastRow = wsSource.Cells(wsSource.Rows.Count, "A").End(xlUp).Row
+    Application.DisplayAlerts = True
     
-    If lastRow < 2 Then
-        MsgBox "Aucune donnée trouvée dans la feuille source.", vbWarning
-        Exit Sub
-    End If
+    ' 3. LECTURE ET REGROUPEMENT DES DONNÉES
+    '=========================================================================
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     
-    ' 6. Lire et traiter les données ligne par ligne de manière sécurisée
-    resultRow = 2
-    Dim groupesTraites As String
-    groupesTraites = "|"
-    
+    ' Parcourir toutes les lignes de données
     For i = 2 To lastRow
-        errorLine = i
+        ' Lire les données de la ligne courante
+        tournee = Trim(CStr(ws.Cells(i, 1).Value))
+        libelleDistrict = Trim(CStr(ws.Cells(i, 2).Value))
+        ligne3 = Trim(CStr(ws.Cells(i, 3).Value))
+        numero = ws.Cells(i, 4).Value
+        motDirecteur = Trim(CStr(ws.Cells(i, 5).Value))
+        voie = Trim(CStr(ws.Cells(i, 6).Value))
+        commune = Trim(CStr(ws.Cells(i, 7).Value))
+        secable = Trim(CStr(ws.Cells(i, 8).Value))
+        samedi = Trim(CStr(ws.Cells(i, 9).Value))
         
-        ' Lire chaque cellule de manière sécurisée
-        Dim tournee As String, libelleDistrict As String, ligne3 As String
-        Dim numero As String, motDirecteur As String, voie As String
-        Dim commune As String, secable As String, samedi As String
+        ' Ignorer les lignes sans données essentielles
+        If commune = "" Or voie = "" Or tournee = "" Then GoTo NextRow
         
-        tournee = LireCelluleSafe(wsSource, i, 1)
-        libelleDistrict = LireCelluleSafe(wsSource, i, 2)
-        ligne3 = LireCelluleSafe(wsSource, i, 3)
-        numero = LireCelluleSafe(wsSource, i, 4)
-        motDirecteur = LireCelluleSafe(wsSource, i, 5)
-        voie = LireCelluleSafe(wsSource, i, 6)
-        commune = LireCelluleSafe(wsSource, i, 7)
-        secable = LireCelluleSafe(wsSource, i, 8)
-        samedi = LireCelluleSafe(wsSource, i, 9)
+        ' Créer la clé unique pour la voie
+        cleVoie = commune & "|" & voie & "|" & motDirecteur
         
-        ' Vérifier que nous avons les données essentielles
-        If numero <> "" And IsNumeric(numero) And commune <> "" And voie <> "" Then
-            Dim cleGroupe As String
-            cleGroupe = commune & "§" & motDirecteur & "§" & voie
-            
-            ' Traiter chaque groupe une seule fois
-            If InStr(groupesTraites, "|" & cleGroupe & "|") = 0 Then
-                groupesTraites = groupesTraites & cleGroupe & "|"
-                TraiterGroupeRobuste wsSource, cleGroupe, lastRow, wsResult, resultRow
+        ' Initialiser le dictionnaire pour cette voie si nécessaire
+        If Not voiesData.Exists(cleVoie) Then
+            Set voiesData(cleVoie) = CreateObject("Scripting.Dictionary")
+            voiesData(cleVoie)("commune") = commune
+            voiesData(cleVoie)("motDirecteur") = motDirecteur
+            voiesData(cleVoie)("voie") = voie
+            voiesData(cleVoie)("ligne3") = ligne3
+            voiesData(cleVoie)("libelleDistrict") = libelleDistrict
+            voiesData(cleVoie)("tournees") = CreateObject("Scripting.Dictionary")
+            voiesData(cleVoie)("secables") = CreateObject("Scripting.Dictionary")
+            voiesData(cleVoie)("samedis") = CreateObject("Scripting.Dictionary")
+            voiesData(cleVoie)("numeros") = CreateObject("Scripting.Dictionary")
+        End If
+        
+        ' Ajouter les valeurs aux ensembles
+        If tournee <> "" Then voiesData(cleVoie)("tournees")(tournee) = True
+        If secable <> "" Then voiesData(cleVoie)("secables")(secable) = True
+        If samedi <> "" Then voiesData(cleVoie)("samedis")(samedi) = True
+        
+        ' Ajouter le numéro s'il est valide
+        If IsNumeric(numero) And numero <> "" Then
+            Dim numInt As Long
+            numInt = CLng(numero)
+            If numInt > 0 Then
+                voiesData(cleVoie)("numeros")(numInt) = tournee & "|" & secable & "|" & samedi
             End If
         End If
+        
+NextRow:
     Next i
     
-    ' 7. Ajuster la largeur des colonnes
-    wsResult.Columns("A:I").AutoFit
+    ' 4. TRAITEMENT ET ÉCRITURE DES RÉSULTATS
+    '=========================================================================
+    currentRow = 2
+    Dim cleVoieArray As Variant
+    cleVoieArray = voiesData.Keys
     
-    MsgBox "Calcul des bornes terminé. " & (resultRow - 2) & " lignes générées.", vbInformation
+    Dim j As Long
+    For j = 0 To UBound(cleVoieArray)
+        Dim voieInfo As Object
+        Set voieInfo = voiesData(cleVoieArray(j))
+        
+        commune = voieInfo("commune")
+        motDirecteur = voieInfo("motDirecteur")
+        voie = voieInfo("voie")
+        ligne3 = voieInfo("ligne3")
+        libelleDistrict = voieInfo("libelleDistrict")
+        
+        ' Déterminer si la voie est "complète"
+        Dim estComplete As Boolean
+        estComplete = (voieInfo("tournees").Count = 1) And _
+                     (voieInfo("secables").Count <= 1) And _
+                     (voieInfo("samedis").Count <= 1)
+        
+        If estComplete Then
+            ' 4A. VOIE COMPLÈTE - Une seule ligne sans borne
+            '=================================================================
+            Dim tourneeUnique As String, secableUnique As String, samediUnique As String
+            
+            ' Récupérer les valeurs uniques
+            Dim keyArray As Variant
+            keyArray = voieInfo("tournees").Keys
+            tourneeUnique = keyArray(0)
+            
+            secableUnique = ""
+            If voieInfo("secables").Count > 0 Then
+                keyArray = voieInfo("secables").Keys
+                secableUnique = keyArray(0)
+            End If
+            
+            samediUnique = ""
+            If voieInfo("samedis").Count > 0 Then
+                keyArray = voieInfo("samedis").Keys
+                samediUnique = keyArray(0)
+            End If
+            
+            ' Écrire la ligne
+            With wsCalcul
+                .Cells(currentRow, 1).Value = commune
+                .Cells(currentRow, 2).Value = motDirecteur
+                .Cells(currentRow, 3).Value = voie
+                .Cells(currentRow, 4).Value = ligne3
+                .Cells(currentRow, 5).Value = "" ' Pas de borne pour voie complète
+                .Cells(currentRow, 6).Value = libelleDistrict
+                .Cells(currentRow, 7).Value = tourneeUnique
+                .Cells(currentRow, 8).Value = secableUnique
+                .Cells(currentRow, 9).Value = samediUnique
+            End With
+            currentRow = currentRow + 1
+            
+        Else
+            ' 4B. VOIE INCOMPLÈTE - Calcul des bornes par parité
+            '=================================================================
+            ' Grouper les numéros par combinaison Tournée|Sécable|Samedi
+            Dim groupes As Object
+            Set groupes = CreateObject("Scripting.Dictionary")
+            
+            Dim numerosArray As Variant
+            numerosArray = voieInfo("numeros").Keys
+            
+            Dim k As Long
+            For k = 0 To UBound(numerosArray)
+                Dim numCurrent As Long
+                numCurrent = numerosArray(k)
+                Dim combinaison As String
+                combinaison = voieInfo("numeros")(numCurrent)
+                
+                If Not groupes.Exists(combinaison) Then
+                    Set groupes(combinaison) = CreateObject("Scripting.Dictionary")
+                    groupes(combinaison)("pairs") = CreateObject("Scripting.Dictionary")
+                    groupes(combinaison)("impairs") = CreateObject("Scripting.Dictionary")
+                End If
+                
+                ' Séparer pairs et impairs
+                If numCurrent Mod 2 = 0 Then
+                    groupes(combinaison)("pairs")(numCurrent) = True
+                Else
+                    groupes(combinaison)("impairs")(numCurrent) = True
+                End If
+            Next k
+            
+            ' Traiter chaque groupe
+            Dim groupesArray As Variant
+            groupesArray = groupes.Keys
+            
+            For k = 0 To UBound(groupesArray)
+                Dim groupeKey As String
+                groupeKey = groupesArray(k)
+                
+                ' Extraire Tournée, Sécable, Samedi de la combinaison
+                Dim parts As Variant
+                parts = Split(groupeKey, "|")
+                Dim tourneeGroupe As String, secableGroupe As String, samediGroupe As String
+                tourneeGroupe = parts(0)
+                secableGroupe = IIf(UBound(parts) >= 1, parts(1), "")
+                samediGroupe = IIf(UBound(parts) >= 2, parts(2), "")
+                
+                ' Traiter les pairs
+                If groupes(groupeKey)("pairs").Count > 0 Then
+                    Dim paitsArray As Variant
+                    paitsArray = groupes(groupeKey)("pairs").Keys
+                    
+                    Dim minPair As Long, maxPair As Long
+                    minPair = paitsArray(0)
+                    maxPair = paitsArray(0)
+                    
+                    Dim m As Long
+                    For m = 1 To UBound(paitsArray)
+                        If paitsArray(m) < minPair Then minPair = paitsArray(m)
+                        If paitsArray(m) > maxPair Then maxPair = paitsArray(m)
+                    Next m
+                    
+                    ' Écrire la ligne pour les pairs
+                    With wsCalcul
+                        .Cells(currentRow, 1).Value = commune
+                        .Cells(currentRow, 2).Value = motDirecteur
+                        .Cells(currentRow, 3).Value = voie
+                        .Cells(currentRow, 4).Value = ligne3
+                        .Cells(currentRow, 5).Value = minPair & " → " & maxPair
+                        .Cells(currentRow, 6).Value = libelleDistrict
+                        .Cells(currentRow, 7).Value = tourneeGroupe
+                        .Cells(currentRow, 8).Value = secableGroupe
+                        .Cells(currentRow, 9).Value = samediGroupe
+                    End With
+                    currentRow = currentRow + 1
+                End If
+                
+                ' Traiter les impairs
+                If groupes(groupeKey)("impairs").Count > 0 Then
+                    Dim impairsArray As Variant
+                    impairsArray = groupes(groupeKey)("impairs").Keys
+                    
+                    Dim minImpair As Long, maxImpair As Long
+                    minImpair = impairsArray(0)
+                    maxImpair = impairsArray(0)
+                    
+                    For m = 1 To UBound(impairsArray)
+                        If impairsArray(m) < minImpair Then minImpair = impairsArray(m)
+                        If impairsArray(m) > maxImpair Then maxImpair = impairsArray(m)
+                    Next m
+                    
+                    ' Écrire la ligne pour les impairs
+                    With wsCalcul
+                        .Cells(currentRow, 1).Value = commune
+                        .Cells(currentRow, 2).Value = motDirecteur
+                        .Cells(currentRow, 3).Value = voie
+                        .Cells(currentRow, 4).Value = ligne3
+                        .Cells(currentRow, 5).Value = minImpair & " → " & maxImpair
+                        .Cells(currentRow, 6).Value = libelleDistrict
+                        .Cells(currentRow, 7).Value = tourneeGroupe
+                        .Cells(currentRow, 8).Value = secableGroupe
+                        .Cells(currentRow, 9).Value = samediGroupe
+                    End With
+                    currentRow = currentRow + 1
+                End If
+            Next k
+        End If
+    Next j
+    
+    ' 5. MISE EN FORME FINALE
+    '=========================================================================
+    With wsCalcul
+        ' Ajuster la largeur des colonnes
+        .Columns("A:I").AutoFit
+        
+        ' Ajouter des bordures
+        .Range("A1:I" & (currentRow - 1)).Borders.LineStyle = xlContinuous
+        
+        ' Centrer les en-têtes
+        .Range("A1:I1").HorizontalAlignment = xlCenter
+        
+        ' Aller à la cellule A1
+        .Range("A1").Select
+    End With
+    
+    ' Message de confirmation
+    MsgBox "Calcul des bornes terminé avec succès !" & vbCrLf & _
+           "Nombre de voies traitées : " & voiesData.Count & vbCrLf & _
+           "Lignes générées : " & (currentRow - 2), vbInformation
+    
     Exit Sub
     
 ErrorHandler:
-    MsgBox "Erreur ligne " & errorLine & " : " & Err.Description & " (Code: " & Err.Number & ")" & vbCrLf & _
-           "Vérifiez les données de cette ligne dans la feuille source.", vbCritical
-End Sub
-
-' Fonction pour lire une cellule de manière ultra-sécurisée
-Private Function LireCelluleSafe(ws As Worksheet, ligne As Long, colonne As Long) As String
-    On Error Resume Next
-    
-    Dim valeur As Variant
-    valeur = ws.Cells(ligne, colonne).Value
-    
-    If Err.Number <> 0 Then
-        LireCelluleSafe = ""
-        Err.Clear
-        Exit Function
-    End If
-    
-    If IsNull(valeur) Then
-        LireCelluleSafe = ""
-    ElseIf IsEmpty(valeur) Then
-        LireCelluleSafe = ""
-    ElseIf VarType(valeur) = vbError Then
-        LireCelluleSafe = ""
-    Else
-        LireCelluleSafe = Trim(CStr(valeur))
-    End If
-    
-    On Error GoTo 0
-End Function
-
-' Subroutine pour traiter un groupe de manière robuste
-Private Sub TraiterGroupeRobuste(wsSource As Worksheet, cleGroupe As String, lastRow As Long, wsResult As Worksheet, ByRef resultRow As Long)
-    On Error Resume Next
-    
-    ' Extraire les éléments de la clé du groupe
-    Dim partiesGroupe As Variant
-    partiesGroupe = Split(cleGroupe, "§")
-    Dim communeCible As String, motDirecteurCible As String, voieCible As String
-    communeCible = partiesGroupe(0)
-    motDirecteurCible = partiesGroupe(1)
-    voieCible = partiesGroupe(2)
-    
-    ' Collecter toutes les adresses valides de ce groupe
-    Dim adressesGroupe As String
-    Dim premiereInfo As String
-    adressesGroupe = ""
-    premiereInfo = ""
-    
-    Dim i As Long
-    For i = 2 To lastRow
-        Dim commune As String, motDirecteur As String, voie As String, numero As String
-        commune = LireCelluleSafe(wsSource, i, 7)
-        motDirecteur = LireCelluleSafe(wsSource, i, 5)
-        voie = LireCelluleSafe(wsSource, i, 6)
-        numero = LireCelluleSafe(wsSource, i, 4)
-        
-        ' Vérifier si cette ligne appartient au groupe
-        If commune = communeCible And motDirecteur = motDirecteurCible And voie = voieCible Then
-            If numero <> "" And IsNumeric(numero) Then
-                Dim tournee As String, secable As String, samedi As String
-                Dim libelleDistrict As String, ligne3 As String
-                
-                tournee = LireCelluleSafe(wsSource, i, 1)
-                secable = LireCelluleSafe(wsSource, i, 8)
-                samedi = LireCelluleSafe(wsSource, i, 9)
-                libelleDistrict = LireCelluleSafe(wsSource, i, 2)
-                ligne3 = LireCelluleSafe(wsSource, i, 3)
-                
-                ' Normaliser les valeurs vides pour la comparaison
-                If tournee = "" Then tournee = "VIDE"
-                If secable = "" Then secable = "VIDE"
-                If samedi = "" Then samedi = "VIDE"
-                
-                ' Stocker l'information de l'adresse
-                Dim infoAdresse As String
-                infoAdresse = numero & ";" & tournee & ";" & secable & ";" & samedi
-                
-                If adressesGroupe = "" Then
-                    adressesGroupe = infoAdresse
-                    premiereInfo = libelleDistrict & ";" & ligne3
-                Else
-                    adressesGroupe = adressesGroupe & "|" & infoAdresse
-                End If
-            End If
-        End If
-    Next i
-    
-    ' Traiter le groupe si nous avons des adresses
-    If adressesGroupe <> "" Then
-        EcrireResultatGroupe communeCible, motDirecteurCible, voieCible, premiereInfo, adressesGroupe, wsResult, resultRow
-    End If
-    
-    On Error GoTo 0
-End Sub
-
-' Subroutine pour écrire le résultat d'un groupe
-Private Sub EcrireResultatGroupe(commune As String, motDirecteur As String, voie As String, _
-    premiereInfo As String, adressesGroupe As String, wsResult As Worksheet, ByRef resultRow As Long)
-    
-    ' Extraire les informations communes
-    Dim infoParties As Variant
-    infoParties = Split(premiereInfo, ";")
-    Dim libelleDistrict As String, ligne3 As String
-    libelleDistrict = infoParties(0)
-    If UBound(infoParties) >= 1 Then ligne3 = infoParties(1)
-    
-    ' Analyser les adresses
-    Dim adresses As Variant
-    adresses = Split(adressesGroupe, "|")
-    
-    ' Vérifier la complétude de la voie
-    Dim premiereAdresse As Variant
-    premiereAdresse = Split(adresses(0), ";")
-    Dim refTournee As String, refSecable As String, refSamedi As String
-    refTournee = premiereAdresse(1)
-    refSecable = premiereAdresse(2)
-    refSamedi = premiereAdresse(3)
-    
-    Dim estComplete As Boolean
-    estComplete = True
-    
-    Dim i As Long
-    For i = 1 To UBound(adresses)
-        Dim autreAdresse As Variant
-        autreAdresse = Split(adresses(i), ";")
-        
-        If autreAdresse(1) <> refTournee Or autreAdresse(2) <> refSecable Or autreAdresse(3) <> refSamedi Then
-            estComplete = False
-            Exit For
-        End If
-    Next i
-    
-    ' Dénormaliser les valeurs pour l'affichage
-    If refTournee = "VIDE" Then refTournee = ""
-    If refSecable = "VIDE" Then refSecable = ""
-    If refSamedi = "VIDE" Then refSamedi = ""
-    
-    If estComplete Then
-        ' Voie complète
-        EcrireLigneResultat wsResult, resultRow, commune, motDirecteur, voie, ligne3, "", _
-            libelleDistrict, refTournee, refSecable, refSamedi
-        resultRow = resultRow + 1
-    Else
-        ' Voie incomplète - calculer les bornes
-        CalculerBornesIncompletes commune, motDirecteur, voie, ligne3, libelleDistrict, adresses, wsResult, resultRow
-    End If
-End Sub
-
-' Subroutine pour calculer les bornes des voies incomplètes
-Private Sub CalculerBornesIncompletes(commune As String, motDirecteur As String, voie As String, _
-    ligne3 As String, libelleDistrict As String, adresses As Variant, wsResult As Worksheet, ByRef resultRow As Long)
-    
-    Dim sousGroupesTraites As String
-    sousGroupesTraites = "|"
-    
-    Dim i As Long
-    For i = 0 To UBound(adresses)
-        Dim adresseCourante As Variant
-        adresseCourante = Split(adresses(i), ";")
-        
-        Dim cleSousGroupe As String
-        cleSousGroupe = adresseCourante(1) & "§" & adresseCourante(2) & "§" & adresseCourante(3)
-        
-        If InStr(sousGroupesTraites, "|" & cleSousGroupe & "|") = 0 Then
-            sousGroupesTraites = sousGroupesTraites & cleSousGroupe & "|"
-            
-            ' Collecter les numéros pairs et impairs
-            Dim listePairs As String, listeImpairs As String
-            listePairs = ""
-            listeImpairs = ""
-            
-            Dim j As Long
-            For j = 0 To UBound(adresses)
-                Dim autreAdresse As Variant
-                autreAdresse = Split(adresses(j), ";")
-                
-                Dim autreCle As String
-                autreCle = autreAdresse(1) & "§" & autreAdresse(2) & "§" & autreAdresse(3)
-                
-                If autreCle = cleSousGroupe Then
-                    Dim numero As Long
-                    numero = CLng(autreAdresse(0))
-                    
-                    If numero Mod 2 = 0 Then
-                        If listePairs = "" Then
-                            listePairs = CStr(numero)
-                        Else
-                            listePairs = listePairs & "," & CStr(numero)
-                        End If
-                    Else
-                        If listeImpairs = "" Then
-                            listeImpairs = CStr(numero)
-                        Else
-                            listeImpairs = listeImpairs & "," & CStr(numero)
-                        End If
-                    End If
-                End If
-            Next j
-            
-            ' Dénormaliser pour l'affichage
-            Dim tourneeAff As String, secableAff As String, samediAff As String
-            Dim cleParties As Variant
-            cleParties = Split(cleSousGroupe, "§")
-            tourneeAff = IIf(cleParties(0) = "VIDE", "", cleParties(0))
-            secableAff = IIf(cleParties(1) = "VIDE", "", cleParties(1))
-            samediAff = IIf(cleParties(2) = "VIDE", "", cleParties(2))
-            
-            ' Écrire les bornes
-            If listePairs <> "" Then
-                Dim bornePairs As String
-                bornePairs = FormatBorne(listePairs)
-                EcrireLigneResultat wsResult, resultRow, commune, motDirecteur, voie, ligne3, bornePairs, _
-                    libelleDistrict, tourneeAff, secableAff, samediAff
-                resultRow = resultRow + 1
-            End If
-            
-            If listeImpairs <> "" Then
-                Dim borneImpairs As String
-                borneImpairs = FormatBorne(listeImpairs)
-                EcrireLigneResultat wsResult, resultRow, commune, motDirecteur, voie, ligne3, borneImpairs, _
-                    libelleDistrict, tourneeAff, secableAff, samediAff
-                resultRow = resultRow + 1
-            End If
-        End If
-    Next i
-End Sub
-
-' Fonction pour formater une borne
-Private Function FormatBorne(listeNumeros As String) As String
-    If listeNumeros = "" Then
-        FormatBorne = ""
-        Exit Function
-    End If
-    
-    Dim tabNumeros As Variant
-    tabNumeros = Split(listeNumeros, ",")
-    
-    ' Convertir et trier
-    Dim numArray() As Long
-    ReDim numArray(0 To UBound(tabNumeros))
-    
-    Dim i As Long, j As Long, temp As Long
-    For i = 0 To UBound(tabNumeros)
-        numArray(i) = CLng(tabNumeros(i))
-    Next i
-    
-    ' Tri
-    For i = 0 To UBound(numArray) - 1
-        For j = i + 1 To UBound(numArray)
-            If numArray(i) > numArray(j) Then
-                temp = numArray(i)
-                numArray(i) = numArray(j)
-                numArray(j) = temp
-            End If
-        Next j
-    Next i
-    
-    ' Formater
-    If UBound(numArray) = 0 Then
-        FormatBorne = CStr(numArray(0))
-    Else
-        FormatBorne = CStr(numArray(0)) & " → " & CStr(numArray(UBound(numArray)))
-    End If
-End Function
-
-' Subroutine pour écrire une ligne de résultat
-Private Sub EcrireLigneResultat(ws As Worksheet, row As Long, _
-    commune As String, motDirecteur As String, voie As String, _
-    ligne3 As String, borne As String, libelleDistrict As String, _
-    tournee As String, secable As String, samedi As String)
-    
-    With ws
-        .Cells(row, 1).Value = commune
-        .Cells(row, 2).Value = motDirecteur
-        .Cells(row, 3).Value = voie
-        .Cells(row, 4).Value = ligne3
-        .Cells(row, 5).Value = borne
-        .Cells(row, 6).Value = libelleDistrict
-        .Cells(row, 7).Value = tournee
-        .Cells(row, 8).Value = secable
-        .Cells(row, 9).Value = samedi
-    End With
+    Application.DisplayAlerts = True
+    MsgBox "Erreur lors du calcul des bornes : " & Err.Description, vbCritical
 End Sub
