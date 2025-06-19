@@ -329,7 +329,12 @@ Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
                     If numerosPairs(j) > maxPair Then maxPair = numerosPairs(j)
                 Next j
                 
-                bornePairs = minPair & " → " & maxPair
+                ' Si un seul numéro, pas de flèche
+                If minPair = maxPair Then
+                    bornePairs = CStr(minPair)
+                Else
+                    bornePairs = minPair & " à " & maxPair
+                End If
             End If
             
             ' Calculer borne des impairs
@@ -343,7 +348,12 @@ Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
                     If numerosImpairs(j) > maxImpair Then maxImpair = numerosImpairs(j)
                 Next j
                 
-                borneImpairs = minImpair & " → " & maxImpair
+                ' Si un seul numéro, pas de flèche
+                If minImpair = maxImpair Then
+                    borneImpairs = CStr(minImpair)
+                Else
+                    borneImpairs = minImpair & " à " & maxImpair
+                End If
             End If
             
             ' Construire la borne combinée : "impairs / pairs"
@@ -358,17 +368,19 @@ Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
                 borneCombinee = ""
             End If
             
-            ' Écrire UNE SEULE ligne pour cette combinaison
-            wsCalcul.Cells(ligneResultat, 1) = commune
-            wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-            wsCalcul.Cells(ligneResultat, 3) = voie
-            wsCalcul.Cells(ligneResultat, 4) = ligne3
-            wsCalcul.Cells(ligneResultat, 5) = borneCombinee
-            wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-            wsCalcul.Cells(ligneResultat, 7) = tourneeCombo
-            wsCalcul.Cells(ligneResultat, 8) = secableCombo
-            wsCalcul.Cells(ligneResultat, 9) = samediCombo
-            ligneResultat = ligneResultat + 1
+            ' Écrire UNE SEULE ligne pour cette combinaison SEULEMENT s'il y a des numéros
+            If borneCombinee <> "" Then
+                wsCalcul.Cells(ligneResultat, 1) = commune
+                wsCalcul.Cells(ligneResultat, 2) = motDirecteur
+                wsCalcul.Cells(ligneResultat, 3) = voie
+                wsCalcul.Cells(ligneResultat, 4) = ligne3
+                wsCalcul.Cells(ligneResultat, 5) = borneCombinee
+                wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
+                wsCalcul.Cells(ligneResultat, 7) = tourneeCombo
+                wsCalcul.Cells(ligneResultat, 8) = secableCombo
+                wsCalcul.Cells(ligneResultat, 9) = samediCombo
+                ligneResultat = ligneResultat + 1
+            End If
             
             End If
                 ' Cas spécial : combinaison sans numéros valides
