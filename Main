@@ -122,12 +122,13 @@ Sub CalculerBornes()
     i = 1
     Do While i <= processedCount
         Dim voieActuelle As String
-        voieActuelle = finalProcessedData(i, 1)
+        voieActuelle = CStr(finalProcessedData(i, 1))
         
         ' Trouver la fin de cette voie
         Dim finVoie As Long
         finVoie = i
-        Do While finVoie < processedCount And finalProcessedData(finVoie + 1, 1) = voieActuelle
+        Do While finVoie < processedCount
+            If CStr(finalProcessedData(finVoie + 1, 1)) <> voieActuelle Then Exit Do
             finVoie = finVoie + 1
         Loop
         
@@ -182,7 +183,7 @@ Sub TraiterVoieUltraRapide(ByRef data As Variant, ByVal debut As Long, ByVal fin
     Dim i As Long
     For i = debut To fin
         Dim combo As String
-        combo = data(i, 10)  ' combinaison précalculée
+        combo = CStr(data(i, 10))  ' combinaison précalculée
         
         ' Vérifier si nouvelle combinaison
         Dim estNouveau As Boolean
@@ -226,23 +227,27 @@ Sub TraiterVoieUltraRapide(ByRef data As Variant, ByVal debut As Long, ByVal fin
         premierTrouve = False
         
         For i = debut To fin
-            If data(i, 10) = comboActuelle Then
+            If CStr(data(i, 10)) = comboActuelle Then
                 ' Récupérer les infos de référence
                 If Not premierTrouve Then
-                    refTournee = data(i, 2)
-                    refSecable = data(i, 3)
-                    refSamedi = data(i, 4)
-                    refCommune = Split(data(i, 1), "|")(0)
-                    refVoie = Split(data(i, 1), "|")(1)
-                    refMotDirecteur = data(i, 7)
-                    refLigne3 = data(i, 8)
-                    refLibelleDistrict = data(i, 9)
+                    refTournee = CStr(data(i, 2))
+                    refSecable = CStr(data(i, 3))
+                    refSamedi = CStr(data(i, 4))
+                    
+                    Dim voieParts As Variant
+                    voieParts = Split(CStr(data(i, 1)), "|")
+                    refCommune = voieParts(0)
+                    refVoie = voieParts(1)
+                    
+                    refMotDirecteur = CStr(data(i, 7))
+                    refLigne3 = CStr(data(i, 8))
+                    refLibelleDistrict = CStr(data(i, 9))
                     premierTrouve = True
                 End If
                 
                 ' Collecter le numéro selon sa parité
                 Dim numero As Long
-                numero = data(i, 5)
+                numero = CLng(data(i, 5))
                 If numero Mod 2 = 0 Then
                     nbPairs = nbPairs + 1
                     pairs(nbPairs) = numero
