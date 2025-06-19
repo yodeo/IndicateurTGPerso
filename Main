@@ -80,13 +80,22 @@ Sub CalculerBornes()
     
     If processedCount = 0 Then GoTo CleanUp
     
-    ' Redimensionner aux données réelles
-    ReDim Preserve processedData(1 To processedCount, 1 To 10)
+    ' Créer un nouveau tableau aux bonnes dimensions
+    Dim finalProcessedData() As Variant
+    ReDim finalProcessedData(1 To processedCount, 1 To 10)
+    
+    Dim k As Long
+    For k = 1 To processedCount
+        Dim col As Long
+        For col = 1 To 10
+            finalProcessedData(k, col) = processedData(k, col)
+        Next col
+    Next k
     
     ' 3. TRI RAPIDE POUR REGROUPEMENT
     '=========================================================================
     ' Tri par cleVoie puis par combinaison
-    Call TriRapideMultiColonne(processedData, 1, processedCount, 1, 10)
+    Call TriRapideMultiColonne(finalProcessedData, 1, processedCount, 1, 10)
     
     ' 4. CRÉATION DE LA FEUILLE RÉSULTAT
     '=========================================================================
@@ -113,17 +122,17 @@ Sub CalculerBornes()
     i = 1
     Do While i <= processedCount
         Dim voieActuelle As String
-        voieActuelle = processedData(i, 1)
+        voieActuelle = finalProcessedData(i, 1)
         
         ' Trouver la fin de cette voie
         Dim finVoie As Long
         finVoie = i
-        Do While finVoie < processedCount And processedData(finVoie + 1, 1) = voieActuelle
+        Do While finVoie < processedCount And finalProcessedData(finVoie + 1, 1) = voieActuelle
             finVoie = finVoie + 1
         Loop
         
         ' Traiter cette voie (de i à finVoie)
-        Call TraiterVoieUltraRapide(processedData, i, finVoie, resultArray, resultCount)
+        Call TraiterVoieUltraRapide(finalProcessedData, i, finVoie, resultArray, resultCount)
         
         i = finVoie + 1
     Loop
