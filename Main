@@ -1,4 +1,8 @@
-Sub CalculerBornes()
+' Lire les données de distribution
+            Dim tournee As String, secable As String, samedi As String
+            tournee = CellToString(ws.Cells(i, 1))
+            secable = CellToString(ws.Cells(i, 8))
+            samedi = CellToString(ws.Cells(i, 9))Sub CalculerBornes()
     '=========================================================================
     ' VERSION ULTRA-SIMPLIFIÉE - ÉVITE LES DICTIONNAIRES COMPLEXES
     '=========================================================================
@@ -158,68 +162,62 @@ Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
             ' Marquer cette ligne comme traitée
             voiesTraitees(i) = True
             
-            ' Collecter les données uniques
-            Dim tournee As String, secable As String, samedi As String
-            tournee = CellToString(ws.Cells(i, 1))
-            secable = CellToString(ws.Cells(i, 8))
-            samedi = CellToString(ws.Cells(i, 9))
-            
-            ' Ajouter tournée si nouvelle
-            If tournee <> "" Then
-                Dim trouveTournee As Boolean
-                trouveTournee = False
-                Dim j As Long
-                For j = 1 To nbTournees
-                    If tournees(j) = tournee Then
-                        trouveTournee = True
-                        Exit For
-                    End If
-                Next j
-                If Not trouveTournee Then
-                    nbTournees = nbTournees + 1
-                    tournees(nbTournees) = tournee
-                End If
-            End If
-            
-            ' Ajouter sécable si nouveau
-            If secable <> "" Then
-                Dim trouveSecable As Boolean
-                trouveSecable = False
-                For j = 1 To nbSecables
-                    If secables(j) = secable Then
-                        trouveSecable = True
-                        Exit For
-                    End If
-                Next j
-                If Not trouveSecable Then
-                    nbSecables = nbSecables + 1
-                    secables(nbSecables) = secable
-                End If
-            End If
-            
-            ' Ajouter samedi si nouveau
-            If samedi <> "" Then
-                Dim trouveSamedi As Boolean
-                trouveSamedi = False
-                For j = 1 To nbSamedis
-                    If samedis(j) = samedi Then
-                        trouveSamedi = True
-                        Exit For
-                    End If
-                Next j
-                If Not trouveSamedi Then
-                    nbSamedis = nbSamedis + 1
-                    samedis(nbSamedis) = samedi
-                End If
-            End If
-            
-            ' Collecter les numéros avec leur combinaison
+            ' Collecter les données uniques ET les numéros avec leur combinaison
             Dim numero As Variant
             numero = ws.Cells(i, 4).Value
             If IsNumeric(numero) And numero > 0 Then
+                ' SEULEMENT si le numéro est valide, on collecte tout
                 nbNumeros = nbNumeros + 1
                 numeros(nbNumeros) = CLng(numero)
                 combinaisons(nbNumeros) = tournee & "|" & secable & "|" & samedi
+                
+                ' Collecter tournées uniques
+                If tournee <> "" Then
+                    Dim trouveTournee As Boolean
+                    trouveTournee = False
+                    For j = 1 To nbTournees
+                        If tournees(j) = tournee Then
+                            trouveTournee = True
+                            Exit For
+                        End If
+                    Next j
+                    If Not trouveTournee Then
+                        nbTournees = nbTournees + 1
+                        tournees(nbTournees) = tournee
+                    End If
+                End If
+                
+                ' Collecter sécables uniques
+                If secable <> "" Then
+                    Dim trouveSecable As Boolean
+                    trouveSecable = False
+                    For j = 1 To nbSecables
+                        If secables(j) = secable Then
+                            trouveSecable = True
+                            Exit For
+                        End If
+                    Next j
+                    If Not trouveSecable Then
+                        nbSecables = nbSecables + 1
+                        secables(nbSecables) = secable
+                    End If
+                End If
+                
+                ' Collecter samedis uniques
+                If samedi <> "" Then
+                    Dim trouveSamedi As Boolean
+                    trouveSamedi = False
+                    For j = 1 To nbSamedis
+                        If samedis(j) = samedi Then
+                            trouveSamedi = True
+                            Exit For
+                        End If
+                    Next j
+                    If Not trouveSamedi Then
+                        nbSamedis = nbSamedis + 1
+                        samedis(nbSamedis) = samedi
+                    End If
+                End If
             End If
         End If
     Next i
