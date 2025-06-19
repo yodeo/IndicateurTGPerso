@@ -1,12 +1,8 @@
 Sub CalculerBornes()
     '=========================================================================
     ' MACRO CALCUL DES BORNES - INDICATEUR TG
-    ' Auteur: Développé selon les spécifications fournies
+    ' Version corrigée avec gestion d'erreur détaillée
     ' Date: Juin 2025
-    ' 
-    ' Objectif: Calculer les bornes de numéros pour chaque voie selon les règles:
-    ' - Si voie complète (même Tournée, Sécable, Samedi) -> une ligne sans borne
-    ' - Sinon -> calcul des bornes séparément pour pairs et impairs
     '=========================================================================
     
     Dim ws As Worksheet
@@ -14,6 +10,7 @@ Sub CalculerBornes()
     Dim lastRow As Long
     Dim i As Long
     Dim currentRow As Long
+    Dim ligneErreur As Long
     
     ' Dictionnaires pour regrouper les données
     Dim voiesData As Object
@@ -29,38 +26,43 @@ Sub CalculerBornes()
     
     ' 1. IDENTIFICATION DE LA FEUILLE SOURCE
     '=========================================================================
-    ' Chercher la feuille principale (peut avoir différents noms)
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
     Set ws = Nothing
-    For Each ws In ThisWorkbook.Worksheets
-        If ws.Name <> "Calcul des bornes" Then
+    Dim wsTemp As Worksheet
+    
+    For Each wsTemp In ThisWorkbook.Worksheets
+        If wsTemp.Name <> "Calcul des bornes" Then
             ' Vérifier si cette feuille contient les bonnes colonnes
-            If ws.Cells(1, 1).Value = "Tournée" And _
-               ws.Cells(1, 4).Value = "Numéro" And _
-               ws.Cells(1, 6).Value = "Voie" Then
+            On Error Resume Next
+            If UCase(Trim(wsTemp.Cells(1, 1).Value)) = "TOURNÉE" And _
+               UCase(Trim(wsTemp.Cells(1, 4).Value)) = "NUMÉRO" And _
+               UCase(Trim(wsTemp.Cells(1, 6).Value)) = "VOIE" Then
+                Set ws = wsTemp
+                On Error GoTo ErrorHandler
                 Exit For
             End If
+            On Error GoTo ErrorHandler
         End If
-    Next ws
+    Next wsTemp
     
     If ws Is Nothing Then
-        MsgBox "Impossible de trouver la feuille source avec les colonnes requises.", vbCritical
-        Exit Sub
+        MsgBox "Impossible de trouver la feuille source avec les colonnes requises." & vbCrLf & _
+               "Vérifiez que votre feuille contient les colonnes : Tournée, Numéro, Voie", vbCritical
+        GoTo CleanUp
     End If
     
     ' 2. SUPPRESSION ET CRÉATION DE LA FEUILLE "Calcul des bornes"
     '=========================================================================
-    Application.DisplayAlerts = False
-    
-    ' Supprimer la feuille si elle existe
     On Error Resume Next
     ThisWorkbook.Worksheets("Calcul des bornes").Delete
     On Error GoTo ErrorHandler
     
-    ' Créer la nouvelle feuille
     Set wsCalcul = ThisWorkbook.Worksheets.Add
     wsCalcul.Name = "Calcul des bornes"
     
-    ' Créer les en-têtes selon les spécifications exactes
+    ' Créer les en-têtes
     With wsCalcul
         .Cells(1, 1).Value = "Commune"
         .Cells(1, 2).Value = "Mot directeur"
@@ -78,24 +80,48 @@ Sub CalculerBornes()
         .Range("A1:I1").Borders.LineStyle = xlContinuous
     End With
     
-    Application.DisplayAlerts = True
-    
     ' 3. LECTURE ET REGROUPEMENT DES DONNÉES
     '=========================================================================
     lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     
+    If lastRow < 2 Then
+        MsgBox "Aucune donnée trouvée dans la feuille source.", vbExclamation
+        GoTo CleanUp
+    End If
+    
     ' Parcourir toutes les lignes de données
     For i = 2 To lastRow
-        ' Lire les données de la ligne courante
-        tournee = Trim(CStr(ws.Cells(i, 1).Value))
-        libelleDistrict = Trim(CStr(ws.Cells(i, 2).Value))
-        ligne3 = Trim(CStr(ws.Cells(i, 3).Value))
+        ligneErreur = i ' Pour localiser l'erreur
+        
+        On Error Resume Next
+        ' Lire les données avec protection contre les erreurs
+        tournee = ""
+        If Not IsEmpty(ws.Cells(i, 1).Value) Then tournee = Trim(CStr(ws.Cells(i, 1).Value))
+        
+        libelleDistrict = ""
+        If Not IsEmpty(ws.Cells(i, 2).Value) Then libelleDistrict = Trim(CStr(ws.Cells(i, 2).Value))
+        
+        ligne3 = ""
+        If Not IsEmpty(ws.Cells(i, 3).Value) Then ligne3 = Trim(CStr(ws.Cells(i, 3).Value))
+        
         numero = ws.Cells(i, 4).Value
-        motDirecteur = Trim(CStr(ws.Cells(i, 5).Value))
-        voie = Trim(CStr(ws.Cells(i, 6).Value))
-        commune = Trim(CStr(ws.Cells(i, 7).Value))
-        secable = Trim(CStr(ws.Cells(i, 8).Value))
-        samedi = Trim(CStr(ws.Cells(i, 9).Value))
+        
+        motDirecteur = ""
+        If Not IsEmpty(ws.Cells(i, 5).Value) Then motDirecteur = Trim(CStr(ws.Cells(i, 5).Value))
+        
+        voie = ""
+        If Not IsEmpty(ws.Cells(i, 6).Value) Then voie = Trim(CStr(ws.Cells(i, 6).Value))
+        
+        commune = ""
+        If Not IsEmpty(ws.Cells(i, 7).Value) Then commune = Trim(CStr(ws.Cells(i, 7).Value))
+        
+        secable = ""
+        If Not IsEmpty(ws.Cells(i, 8).Value) Then secable = Trim(CStr(ws.Cells(i, 8).Value))
+        
+        samedi = ""
+        If Not IsEmpty(ws.Cells(i, 9).Value) Then samedi = Trim(CStr(ws.Cells(i, 9).Value))
+        
+        On Error GoTo ErrorHandler
         
         ' Ignorer les lignes sans données essentielles
         If commune = "" Or voie = "" Or tournee = "" Then GoTo NextRow
@@ -105,29 +131,48 @@ Sub CalculerBornes()
         
         ' Initialiser le dictionnaire pour cette voie si nécessaire
         If Not voiesData.Exists(cleVoie) Then
-            Set voiesData(cleVoie) = CreateObject("Scripting.Dictionary")
-            voiesData(cleVoie)("commune") = commune
-            voiesData(cleVoie)("motDirecteur") = motDirecteur
-            voiesData(cleVoie)("voie") = voie
-            voiesData(cleVoie)("ligne3") = ligne3
-            voiesData(cleVoie)("libelleDistrict") = libelleDistrict
-            voiesData(cleVoie)("tournees") = CreateObject("Scripting.Dictionary")
-            voiesData(cleVoie)("secables") = CreateObject("Scripting.Dictionary")
-            voiesData(cleVoie)("samedis") = CreateObject("Scripting.Dictionary")
-            voiesData(cleVoie)("numeros") = CreateObject("Scripting.Dictionary")
+            Dim nouvelleVoie As Object
+            Set nouvelleVoie = CreateObject("Scripting.Dictionary")
+            
+            nouvelleVoie.Add "commune", commune
+            nouvelleVoie.Add "motDirecteur", motDirecteur
+            nouvelleVoie.Add "voie", voie
+            nouvelleVoie.Add "ligne3", ligne3
+            nouvelleVoie.Add "libelleDistrict", libelleDistrict
+            nouvelleVoie.Add "tournees", CreateObject("Scripting.Dictionary")
+            nouvelleVoie.Add "secables", CreateObject("Scripting.Dictionary")
+            nouvelleVoie.Add "samedis", CreateObject("Scripting.Dictionary")
+            nouvelleVoie.Add "numeros", CreateObject("Scripting.Dictionary")
+            
+            voiesData.Add cleVoie, nouvelleVoie
         End If
         
         ' Ajouter les valeurs aux ensembles
-        If tournee <> "" Then voiesData(cleVoie)("tournees")(tournee) = True
-        If secable <> "" Then voiesData(cleVoie)("secables")(secable) = True
-        If samedi <> "" Then voiesData(cleVoie)("samedis")(samedi) = True
+        Dim voieActuelle As Object
+        Set voieActuelle = voiesData(cleVoie)
+        
+        If tournee <> "" And Not voieActuelle("tournees").Exists(tournee) Then
+            voieActuelle("tournees").Add tournee, True
+        End If
+        
+        If secable <> "" And Not voieActuelle("secables").Exists(secable) Then
+            voieActuelle("secables").Add secable, True
+        End If
+        
+        If samedi <> "" And Not voieActuelle("samedis").Exists(samedi) Then
+            voieActuelle("samedis").Add samedi, True
+        End If
         
         ' Ajouter le numéro s'il est valide
         If IsNumeric(numero) And numero <> "" Then
             Dim numInt As Long
             numInt = CLng(numero)
             If numInt > 0 Then
-                voiesData(cleVoie)("numeros")(numInt) = tournee & "|" & secable & "|" & samedi
+                Dim combinaisonNum As String
+                combinaisonNum = tournee & "|" & secable & "|" & samedi
+                If Not voieActuelle("numeros").Exists(numInt) Then
+                    voieActuelle("numeros").Add numInt, combinaisonNum
+                End If
             End If
         End If
         
@@ -137,11 +182,19 @@ NextRow:
     ' 4. TRAITEMENT ET ÉCRITURE DES RÉSULTATS
     '=========================================================================
     currentRow = 2
+    
     Dim cleVoieArray As Variant
-    cleVoieArray = voiesData.Keys
+    If voiesData.Count > 0 Then
+        cleVoieArray = voiesData.Keys
+    Else
+        MsgBox "Aucune donnée valide trouvée pour le traitement.", vbExclamation
+        GoTo CleanUp
+    End If
     
     Dim j As Long
     For j = 0 To UBound(cleVoieArray)
+        ligneErreur = j ' Pour localiser l'erreur
+        
         Dim voieInfo As Object
         Set voieInfo = voiesData(cleVoieArray(j))
         
@@ -159,24 +212,27 @@ NextRow:
         
         If estComplete Then
             ' 4A. VOIE COMPLÈTE - Une seule ligne sans borne
-            '=================================================================
             Dim tourneeUnique As String, secableUnique As String, samediUnique As String
             
             ' Récupérer les valeurs uniques
-            Dim keyArray As Variant
-            keyArray = voieInfo("tournees").Keys
-            tourneeUnique = keyArray(0)
+            If voieInfo("tournees").Count > 0 Then
+                Dim tourneesKeys As Variant
+                tourneesKeys = voieInfo("tournees").Keys
+                tourneeUnique = tourneesKeys(0)
+            End If
             
             secableUnique = ""
             If voieInfo("secables").Count > 0 Then
-                keyArray = voieInfo("secables").Keys
-                secableUnique = keyArray(0)
+                Dim secablesKeys As Variant
+                secablesKeys = voieInfo("secables").Keys
+                secableUnique = secablesKeys(0)
             End If
             
             samediUnique = ""
             If voieInfo("samedis").Count > 0 Then
-                keyArray = voieInfo("samedis").Keys
-                samediUnique = keyArray(0)
+                Dim samedisKeys As Variant
+                samedisKeys = voieInfo("samedis").Keys
+                samediUnique = samedisKeys(0)
             End If
             
             ' Écrire la ligne
@@ -195,126 +251,134 @@ NextRow:
             
         Else
             ' 4B. VOIE INCOMPLÈTE - Calcul des bornes par parité
-            '=================================================================
             ' Grouper les numéros par combinaison Tournée|Sécable|Samedi
             Dim groupes As Object
             Set groupes = CreateObject("Scripting.Dictionary")
             
-            Dim numerosArray As Variant
-            numerosArray = voieInfo("numeros").Keys
-            
-            Dim k As Long
-            For k = 0 To UBound(numerosArray)
-                Dim numCurrent As Long
-                numCurrent = numerosArray(k)
-                Dim combinaison As String
-                combinaison = voieInfo("numeros")(numCurrent)
+            If voieInfo("numeros").Count > 0 Then
+                Dim numerosKeys As Variant
+                numerosKeys = voieInfo("numeros").Keys
                 
-                If Not groupes.Exists(combinaison) Then
-                    Set groupes(combinaison) = CreateObject("Scripting.Dictionary")
-                    groupes(combinaison)("pairs") = CreateObject("Scripting.Dictionary")
-                    groupes(combinaison)("impairs") = CreateObject("Scripting.Dictionary")
+                Dim k As Long
+                For k = 0 To UBound(numerosKeys)
+                    Dim numCurrent As Long
+                    numCurrent = numerosKeys(k)
+                    Dim combinaison As String
+                    combinaison = voieInfo("numeros")(numCurrent)
+                    
+                    If Not groupes.Exists(combinaison) Then
+                        Dim nouveauGroupe As Object
+                        Set nouveauGroupe = CreateObject("Scripting.Dictionary")
+                        nouveauGroupe.Add "pairs", CreateObject("Scripting.Dictionary")
+                        nouveauGroupe.Add "impairs", CreateObject("Scripting.Dictionary")
+                        groupes.Add combinaison, nouveauGroupe
+                    End If
+                    
+                    ' Séparer pairs et impairs
+                    If numCurrent Mod 2 = 0 Then
+                        If Not groupes(combinaison)("pairs").Exists(numCurrent) Then
+                            groupes(combinaison)("pairs").Add numCurrent, True
+                        End If
+                    Else
+                        If Not groupes(combinaison)("impairs").Exists(numCurrent) Then
+                            groupes(combinaison)("impairs").Add numCurrent, True
+                        End If
+                    End If
+                Next k
+                
+                ' Traiter chaque groupe
+                If groupes.Count > 0 Then
+                    Dim groupesKeys As Variant
+                    groupesKeys = groupes.Keys
+                    
+                    For k = 0 To UBound(groupesKeys)
+                        Dim groupeKey As String
+                        groupeKey = groupesKeys(k)
+                        
+                        ' Extraire Tournée, Sécable, Samedi
+                        Dim parts As Variant
+                        parts = Split(groupeKey, "|")
+                        Dim tourneeGroupe As String, secableGroupe As String, samediGroupe As String
+                        
+                        tourneeGroupe = ""
+                        If UBound(parts) >= 0 Then tourneeGroupe = parts(0)
+                        
+                        secableGroupe = ""
+                        If UBound(parts) >= 1 Then secableGroupe = parts(1)
+                        
+                        samediGroupe = ""
+                        If UBound(parts) >= 2 Then samediGroupe = parts(2)
+                        
+                        ' Traiter les pairs
+                        If groupes(groupeKey)("pairs").Count > 0 Then
+                            Dim paitsKeys As Variant
+                            paitsKeys = groupes(groupeKey)("pairs").Keys
+                            
+                            Dim minPair As Long, maxPair As Long
+                            minPair = paitsKeys(0)
+                            maxPair = paitsKeys(0)
+                            
+                            Dim m As Long
+                            For m = 1 To UBound(paitsKeys)
+                                If paitsKeys(m) < minPair Then minPair = paitsKeys(m)
+                                If paitsKeys(m) > maxPair Then maxPair = paitsKeys(m)
+                            Next m
+                            
+                            ' Écrire la ligne pour les pairs
+                            With wsCalcul
+                                .Cells(currentRow, 1).Value = commune
+                                .Cells(currentRow, 2).Value = motDirecteur
+                                .Cells(currentRow, 3).Value = voie
+                                .Cells(currentRow, 4).Value = ligne3
+                                .Cells(currentRow, 5).Value = minPair & " → " & maxPair
+                                .Cells(currentRow, 6).Value = libelleDistrict
+                                .Cells(currentRow, 7).Value = tourneeGroupe
+                                .Cells(currentRow, 8).Value = secableGroupe
+                                .Cells(currentRow, 9).Value = samediGroupe
+                            End With
+                            currentRow = currentRow + 1
+                        End If
+                        
+                        ' Traiter les impairs
+                        If groupes(groupeKey)("impairs").Count > 0 Then
+                            Dim impairsKeys As Variant
+                            impairsKeys = groupes(groupeKey)("impairs").Keys
+                            
+                            Dim minImpair As Long, maxImpair As Long
+                            minImpair = impairsKeys(0)
+                            maxImpair = impairsKeys(0)
+                            
+                            For m = 1 To UBound(impairsKeys)
+                                If impairsKeys(m) < minImpair Then minImpair = impairsKeys(m)
+                                If impairsKeys(m) > maxImpair Then maxImpair = impairsKeys(m)
+                            Next m
+                            
+                            ' Écrire la ligne pour les impairs
+                            With wsCalcul
+                                .Cells(currentRow, 1).Value = commune
+                                .Cells(currentRow, 2).Value = motDirecteur
+                                .Cells(currentRow, 3).Value = voie
+                                .Cells(currentRow, 4).Value = ligne3
+                                .Cells(currentRow, 5).Value = minImpair & " → " & maxImpair
+                                .Cells(currentRow, 6).Value = libelleDistrict
+                                .Cells(currentRow, 7).Value = tourneeGroupe
+                                .Cells(currentRow, 8).Value = secableGroupe
+                                .Cells(currentRow, 9).Value = samediGroupe
+                            End With
+                            currentRow = currentRow + 1
+                        End If
+                    Next k
                 End If
-                
-                ' Séparer pairs et impairs
-                If numCurrent Mod 2 = 0 Then
-                    groupes(combinaison)("pairs")(numCurrent) = True
-                Else
-                    groupes(combinaison)("impairs")(numCurrent) = True
-                End If
-            Next k
-            
-            ' Traiter chaque groupe
-            Dim groupesArray As Variant
-            groupesArray = groupes.Keys
-            
-            For k = 0 To UBound(groupesArray)
-                Dim groupeKey As String
-                groupeKey = groupesArray(k)
-                
-                ' Extraire Tournée, Sécable, Samedi de la combinaison
-                Dim parts As Variant
-                parts = Split(groupeKey, "|")
-                Dim tourneeGroupe As String, secableGroupe As String, samediGroupe As String
-                tourneeGroupe = parts(0)
-                secableGroupe = IIf(UBound(parts) >= 1, parts(1), "")
-                samediGroupe = IIf(UBound(parts) >= 2, parts(2), "")
-                
-                ' Traiter les pairs
-                If groupes(groupeKey)("pairs").Count > 0 Then
-                    Dim paitsArray As Variant
-                    paitsArray = groupes(groupeKey)("pairs").Keys
-                    
-                    Dim minPair As Long, maxPair As Long
-                    minPair = paitsArray(0)
-                    maxPair = paitsArray(0)
-                    
-                    Dim m As Long
-                    For m = 1 To UBound(paitsArray)
-                        If paitsArray(m) < minPair Then minPair = paitsArray(m)
-                        If paitsArray(m) > maxPair Then maxPair = paitsArray(m)
-                    Next m
-                    
-                    ' Écrire la ligne pour les pairs
-                    With wsCalcul
-                        .Cells(currentRow, 1).Value = commune
-                        .Cells(currentRow, 2).Value = motDirecteur
-                        .Cells(currentRow, 3).Value = voie
-                        .Cells(currentRow, 4).Value = ligne3
-                        .Cells(currentRow, 5).Value = minPair & " → " & maxPair
-                        .Cells(currentRow, 6).Value = libelleDistrict
-                        .Cells(currentRow, 7).Value = tourneeGroupe
-                        .Cells(currentRow, 8).Value = secableGroupe
-                        .Cells(currentRow, 9).Value = samediGroupe
-                    End With
-                    currentRow = currentRow + 1
-                End If
-                
-                ' Traiter les impairs
-                If groupes(groupeKey)("impairs").Count > 0 Then
-                    Dim impairsArray As Variant
-                    impairsArray = groupes(groupeKey)("impairs").Keys
-                    
-                    Dim minImpair As Long, maxImpair As Long
-                    minImpair = impairsArray(0)
-                    maxImpair = impairsArray(0)
-                    
-                    For m = 1 To UBound(impairsArray)
-                        If impairsArray(m) < minImpair Then minImpair = impairsArray(m)
-                        If impairsArray(m) > maxImpair Then maxImpair = impairsArray(m)
-                    Next m
-                    
-                    ' Écrire la ligne pour les impairs
-                    With wsCalcul
-                        .Cells(currentRow, 1).Value = commune
-                        .Cells(currentRow, 2).Value = motDirecteur
-                        .Cells(currentRow, 3).Value = voie
-                        .Cells(currentRow, 4).Value = ligne3
-                        .Cells(currentRow, 5).Value = minImpair & " → " & maxImpair
-                        .Cells(currentRow, 6).Value = libelleDistrict
-                        .Cells(currentRow, 7).Value = tourneeGroupe
-                        .Cells(currentRow, 8).Value = secableGroupe
-                        .Cells(currentRow, 9).Value = samediGroupe
-                    End With
-                    currentRow = currentRow + 1
-                End If
-            Next k
+            End If
         End If
     Next j
     
     ' 5. MISE EN FORME FINALE
     '=========================================================================
     With wsCalcul
-        ' Ajuster la largeur des colonnes
         .Columns("A:I").AutoFit
-        
-        ' Ajouter des bordures
         .Range("A1:I" & (currentRow - 1)).Borders.LineStyle = xlContinuous
-        
-        ' Centrer les en-têtes
         .Range("A1:I1").HorizontalAlignment = xlCenter
-        
-        ' Aller à la cellule A1
         .Range("A1").Select
     End With
     
@@ -323,9 +387,18 @@ NextRow:
            "Nombre de voies traitées : " & voiesData.Count & vbCrLf & _
            "Lignes générées : " & (currentRow - 2), vbInformation
     
-    Exit Sub
+    GoTo CleanUp
     
 ErrorHandler:
+    Dim msgErreur As String
+    msgErreur = "Erreur lors du calcul des bornes :" & vbCrLf & _
+                "Description : " & Err.Description & vbCrLf & _
+                "Numéro d'erreur : " & Err.Number & vbCrLf & _
+                "Ligne de données en cours : " & ligneErreur
+    
+    MsgBox msgErreur, vbCritical
+    
+CleanUp:
+    Application.ScreenUpdating = True
     Application.DisplayAlerts = True
-    MsgBox "Erreur lors du calcul des bornes : " & Err.Description, vbCritical
 End Sub
