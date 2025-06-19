@@ -1,6 +1,6 @@
 Sub CalculerBornes()
     '=========================================================================
-    ' VERSION CORRIGÉE AVEC SÉPARATION PAIRS/IMPAIRS ET PLURI-DISTRIBUTION
+    ' VERSION DEBUG DÉTAILLÉ POUR IDENTIFIER LE PROBLÈME
     '=========================================================================
     
     Dim ws As Worksheet
@@ -9,7 +9,7 @@ Sub CalculerBornes()
     
     On Error GoTo ErrorHandler
     
-    debugInfo = "=== CALCUL DES BORNES ===" & vbCrLf
+    debugInfo = "=== DEBUG DÉTAILLÉ ===" & vbCrLf
     
     ' 1. IDENTIFICATION DE LA FEUILLE SOURCE
     '=========================================================================
@@ -54,7 +54,7 @@ Sub CalculerBornes()
     Set wsCalcul = ThisWorkbook.Worksheets.Add
     wsCalcul.Name = "Calcul des bornes"
     
-    ' En-têtes selon les spécifications exactes
+    ' En-têtes
     With wsCalcul
         .Cells(1, 1) = "Commune"
         .Cells(1, 2) = "Mot directeur"
@@ -70,10 +70,11 @@ Sub CalculerBornes()
         .Range("A1:I1").Interior.Color = RGB(180, 198, 231)
     End With
     
-    ' 3. ANALYSE DES DONNÉES ET IDENTIFICATION DES VOIES
+    ' 3. ANALYSE DES DONNÉES
     '=========================================================================
     Dim lastRow As Long
     lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    debugInfo = debugInfo & "Dernière ligne: " & lastRow & vbCrLf
     
     Dim voiesUniques As Object
     Set voiesUniques = CreateObject("Scripting.Dictionary")
@@ -100,7 +101,7 @@ Sub CalculerBornes()
     
     debugInfo = debugInfo & "Voies uniques trouvées: " & voiesUniques.Count & vbCrLf
     
-    ' 4. TRAITEMENT DE CHAQUE VOIE AVEC LOGIQUE COMPLÈTE
+    ' 4. TEST SUR LES 3 PREMIÈRES VOIES AVEC DEBUG DÉTAILLÉ
     '=========================================================================
     Dim ligneResultat As Long
     ligneResultat = 2
@@ -108,14 +109,23 @@ Sub CalculerBornes()
     Dim voiesKeys As Variant
     voiesKeys = voiesUniques.Keys
     
-    For i = 0 To UBound(voiesKeys)
-        Call TraiterVoieComplete(voiesKeys(i), ws, wsCalcul, ligneResultat)
+    ' Traiter seulement les 3 premières voies pour le debug
+    Dim nbVoiesATester As Long
+    nbVoiesATester = WorksheetFunction.Min(3, UBound(voiesKeys) + 1)
+    
+    debugInfo = debugInfo & vbCrLf & "=== TEST SUR " & nbVoiesATester & " PREMIÈRES VOIES ===" & vbCrLf
+    
+    For i = 0 To nbVoiesATester - 1
+        debugInfo = debugInfo & vbCrLf & "--- TRAITEMENT VOIE " & (i + 1) & " ---" & vbCrLf
+        debugInfo = debugInfo & "Clé: " & voiesKeys(i) & vbCrLf
+        
+        Call TraiterVoieDebugDetaille(voiesKeys(i), ws, wsCalcul, ligneResultat, debugInfo)
     Next i
     
     Dim nbResultats As Long
     nbResultats = ligneResultat - 2
     
-    ' 5. MISE EN FORME FINALE
+    ' 5. MISE EN FORME ET RÉSULTAT
     '=========================================================================
     With wsCalcul
         .Columns("A:I").AutoFit
@@ -126,41 +136,51 @@ Sub CalculerBornes()
         .Range("A1").Select
     End With
     
+    debugInfo = debugInfo & vbCrLf & "=== RÉSULTAT FINAL ===" & vbCrLf
     debugInfo = debugInfo & "Lignes de résultat générées: " & nbResultats & vbCrLf
-    MsgBox debugInfo & vbCrLf & "Calcul terminé avec succès !", vbInformation
+    
+    MsgBox debugInfo, vbInformation
     
     Exit Sub
     
 ErrorHandler:
-    MsgBox "Erreur: " & Err.Description & vbCrLf & debugInfo, vbCritical
+    MsgBox "Erreur: " & Err.Description & " (Ligne " & Erl & ")" & vbCrLf & vbCrLf & debugInfo, vbCritical
 End Sub
 
-Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, ByRef ligneResultat As Long)
-    On Error GoTo ErreurVoie
+Sub TraiterVoieDebugDetaille(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, ByRef ligneResultat As Long, ByRef debugInfo As String)
     
     ' Extraire les informations de la clé
     Dim parts As Variant
     parts = Split(cleVoie, "###")
-    If UBound(parts) < 2 Then Exit Sub
+    If UBound(parts) < 2 Then
+        debugInfo = debugInfo & "ERREUR: Clé invalide" & vbCrLf
+        Exit Sub
+    End If
     
     Dim commune As String, voie As String, motDirecteur As String
     commune = parts(0)
     voie = parts(1)
     motDirecteur = parts(2)
     
-    ' 1. COLLECTER TOUTES LES DONNÉES DE CETTE VOIE
-    '=========================================================================
+    debugInfo = debugInfo & "Commune: [" & commune & "]" & vbCrLf
+    debugInfo = debugInfo & "Voie: [" & voie & "]" & vbCrLf
+    debugInfo = debugInfo & "Mot Directeur: [" & motDirecteur & "]" & vbCrLf
+    
+    ' Collecter toutes les lignes de cette voie
     Dim lastRow As Long
     lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     
-    ' Dictionnaire pour regrouper par combinaison Tournée|Sécable|Samedi
-    Dim groupes As Object
-    Set groupes = CreateObject("Scripting.Dictionary")
+    Dim lignesCorrespondantes As Long
+    lignesCorrespondantes = 0
     
-    ' Variables de référence (première ligne trouvée)
+    ' Variables de référence
     Dim ligne3 As String, libelleDistrict As String
     Dim premiereIteration As Boolean
     premiereIteration = True
+    
+    ' Dictionnaire pour regrouper par combinaison
+    Dim groupes As Object
+    Set groupes = CreateObject("Scripting.Dictionary")
     
     Dim i As Long
     For i = 2 To lastRow
@@ -169,17 +189,27 @@ Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef ws
         communeLigne = Trim(CStr(ws.Cells(i, 7).Value))
         voieLigne = Trim(CStr(ws.Cells(i, 6).Value))
         motDirecteurLigne = Trim(CStr(ws.Cells(i, 5).Value))
-        On Error GoTo ErreurVoie
+        
+        If Err.Number <> 0 Then
+            debugInfo = debugInfo & "Erreur lecture ligne " & i & ": " & Err.Description & vbCrLf
+            On Error GoTo 0
+            GoTo NextLine
+        End If
+        On Error GoTo 0
         
         If communeLigne = commune And voieLigne = voie And motDirecteurLigne = motDirecteur Then
+            lignesCorrespondantes = lignesCorrespondantes + 1
             
-            ' Récupérer les valeurs de référence à la première itération
+            ' Première ligne : récupérer les valeurs de référence
             If premiereIteration Then
                 On Error Resume Next
                 ligne3 = Trim(CStr(ws.Cells(i, 3).Value))
                 libelleDistrict = Trim(CStr(ws.Cells(i, 2).Value))
-                On Error GoTo ErreurVoie
+                On Error GoTo 0
                 premiereIteration = False
+                
+                debugInfo = debugInfo & "Ligne 3: [" & ligne3 & "]" & vbCrLf
+                debugInfo = debugInfo & "Libellé District: [" & libelleDistrict & "]" & vbCrLf
             End If
             
             ' Lire les données de distribution
@@ -188,22 +218,30 @@ Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef ws
             tournee = Trim(CStr(ws.Cells(i, 1).Value))
             secable = Trim(CStr(ws.Cells(i, 8).Value))
             samedi = Trim(CStr(ws.Cells(i, 9).Value))
-            On Error GoTo ErreurVoie
             
-            ' Créer la clé de groupe : Tournée|Sécable|Samedi
+            If Err.Number <> 0 Then
+                debugInfo = debugInfo & "Erreur lecture distribution ligne " & i & ": " & Err.Description & vbCrLf
+                On Error GoTo 0
+                GoTo NextLine
+            End If
+            On Error GoTo 0
+            
+            ' Créer la clé de groupe
             Dim cleGroupe As String
             cleGroupe = tournee & "|" & secable & "|" & samedi
             
-            ' Initialiser le groupe s'il n'existe pas
+            ' Initialiser le groupe si nécessaire
             If Not groupes.Exists(cleGroupe) Then
                 Dim nouveauGroupe As Object
                 Set nouveauGroupe = CreateObject("Scripting.Dictionary")
                 nouveauGroupe("tournee") = tournee
                 nouveauGroupe("secable") = secable
                 nouveauGroupe("samedi") = samedi
-                nouveauGroupe("pairs") = CreateObject("Scripting.Dictionary")
-                nouveauGroupe("impairs") = CreateObject("Scripting.Dictionary")
+                nouveauGroupe("pairs") = New Collection
+                nouveauGroupe("impairs") = New Collection
                 groupes(cleGroupe) = nouveauGroupe
+                
+                debugInfo = debugInfo & "Nouveau groupe: [" & cleGroupe & "]" & vbCrLf
             End If
             
             ' Ajouter le numéro selon sa parité
@@ -214,29 +252,34 @@ Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef ws
                 numInt = CLng(numero)
                 
                 If numInt Mod 2 = 0 Then
-                    ' Numéro pair
-                    If Not groupes(cleGroupe)("pairs").Exists(numInt) Then
-                        groupes(cleGroupe)("pairs")(numInt) = True
-                    End If
+                    groupes(cleGroupe)("pairs").Add numInt
+                    debugInfo = debugInfo & "Ajout pair: " & numInt & " au groupe [" & cleGroupe & "]" & vbCrLf
                 Else
-                    ' Numéro impair
-                    If Not groupes(cleGroupe)("impairs").Exists(numInt) Then
-                        groupes(cleGroupe)("impairs")(numInt) = True
-                    End If
+                    groupes(cleGroupe)("impairs").Add numInt
+                    debugInfo = debugInfo & "Ajout impair: " & numInt & " au groupe [" & cleGroupe & "]" & vbCrLf
                 End If
+            Else
+                debugInfo = debugInfo & "Numéro ignoré ligne " & i & ": [" & numero & "]" & vbCrLf
             End If
         End If
+        
+NextLine:
     Next i
     
-    ' 2. DÉTERMINER SI LA VOIE EST COMPLÈTE
-    '=========================================================================
+    debugInfo = debugInfo & "Lignes correspondantes trouvées: " & lignesCorrespondantes & vbCrLf
+    debugInfo = debugInfo & "Groupes créés: " & groupes.Count & vbCrLf
+    
+    If groupes.Count = 0 Then
+        debugInfo = debugInfo & "PROBLÈME: Aucun groupe créé pour cette voie !" & vbCrLf
+        Exit Sub
+    End If
+    
+    ' Déterminer si la voie est complète
     Dim estComplete As Boolean
-    estComplete = (groupes.Count = 1) ' Une seule combinaison Tournée|Sécable|Samedi
+    estComplete = (groupes.Count = 1)
+    debugInfo = debugInfo & "Voie complète: " & estComplete & vbCrLf
     
-    ' 3. GÉNÉRER LES LIGNES DE RÉSULTAT
-    '=========================================================================
-    If groupes.Count = 0 Then Exit Sub ' Aucune donnée valide
-    
+    ' Générer les lignes de résultat
     Dim groupesKeys As Variant
     groupesKeys = groupes.Keys
     
@@ -248,38 +291,33 @@ Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef ws
         Dim groupe As Object
         Set groupe = groupes(groupeKey)
         
-        Dim tourneeGroupe As String, secableGroupe As String, samediGroupe As String
-        tourneeGroupe = groupe("tournee")
-        secableGroupe = groupe("secable")
-        samediGroupe = groupe("samedi")
+        debugInfo = debugInfo & "Traitement groupe: [" & groupeKey & "]" & vbCrLf
+        debugInfo = debugInfo & "- Pairs: " & groupe("pairs").Count & vbCrLf
+        debugInfo = debugInfo & "- Impairs: " & groupe("impairs").Count & vbCrLf
         
         If estComplete Then
-            ' VOIE COMPLÈTE : Une seule ligne sans borne
-            '=============================================================
+            ' Voie complète : une ligne sans borne
             With wsCalcul
                 .Cells(ligneResultat, 1) = commune
                 .Cells(ligneResultat, 2) = motDirecteur
                 .Cells(ligneResultat, 3) = voie
                 .Cells(ligneResultat, 4) = ligne3
-                .Cells(ligneResultat, 5) = "" ' Pas de borne pour voie complète
+                .Cells(ligneResultat, 5) = "" ' Pas de borne
                 .Cells(ligneResultat, 6) = libelleDistrict
-                .Cells(ligneResultat, 7) = tourneeGroupe
-                .Cells(ligneResultat, 8) = secableGroupe
-                .Cells(ligneResultat, 9) = samediGroupe
+                .Cells(ligneResultat, 7) = groupe("tournee")
+                .Cells(ligneResultat, 8) = groupe("secable")
+                .Cells(ligneResultat, 9) = groupe("samedi")
             End With
             ligneResultat = ligneResultat + 1
+            debugInfo = debugInfo & "→ Ligne voie complète écrite (ligne " & (ligneResultat - 1) & ")" & vbCrLf
             
         Else
-            ' VOIE PLURI-DISTRIBUÉE : Bornes séparées pairs/impairs
-            '=============================================================
+            ' Voie incomplète : bornes par parité
             
-            ' Traiter les numéros pairs
+            ' Traiter les pairs
             If groupe("pairs").Count > 0 Then
-                Dim paitsKeys As Variant
-                paitsKeys = groupe("pairs").Keys
-                
                 Dim minPair As Long, maxPair As Long
-                Call TrouverMinMaxArray(paitsKeys, minPair, maxPair)
+                Call TrouverMinMaxCollection(groupe("pairs"), minPair, maxPair)
                 
                 With wsCalcul
                     .Cells(ligneResultat, 1) = commune
@@ -288,20 +326,18 @@ Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef ws
                     .Cells(ligneResultat, 4) = ligne3
                     .Cells(ligneResultat, 5) = minPair & " → " & maxPair
                     .Cells(ligneResultat, 6) = libelleDistrict
-                    .Cells(ligneResultat, 7) = tourneeGroupe
-                    .Cells(ligneResultat, 8) = secableGroupe
-                    .Cells(ligneResultat, 9) = samediGroupe
+                    .Cells(ligneResultat, 7) = groupe("tournee")
+                    .Cells(ligneResultat, 8) = groupe("secable")
+                    .Cells(ligneResultat, 9) = groupe("samedi")
                 End With
                 ligneResultat = ligneResultat + 1
+                debugInfo = debugInfo & "→ Ligne pairs écrite: " & minPair & " → " & maxPair & " (ligne " & (ligneResultat - 1) & ")" & vbCrLf
             End If
             
-            ' Traiter les numéros impairs
+            ' Traiter les impairs
             If groupe("impairs").Count > 0 Then
-                Dim impairsKeys As Variant
-                impairsKeys = groupe("impairs").Keys
-                
                 Dim minImpair As Long, maxImpair As Long
-                Call TrouverMinMaxArray(impairsKeys, minImpair, maxImpair)
+                Call TrouverMinMaxCollection(groupe("impairs"), minImpair, maxImpair)
                 
                 With wsCalcul
                     .Cells(ligneResultat, 1) = commune
@@ -310,32 +346,26 @@ Sub TraiterVoieComplete(ByVal cleVoie As String, ByRef ws As Worksheet, ByRef ws
                     .Cells(ligneResultat, 4) = ligne3
                     .Cells(ligneResultat, 5) = minImpair & " → " & maxImpair
                     .Cells(ligneResultat, 6) = libelleDistrict
-                    .Cells(ligneResultat, 7) = tourneeGroupe
-                    .Cells(ligneResultat, 8) = secableGroupe
-                    .Cells(ligneResultat, 9) = samediGroupe
+                    .Cells(ligneResultat, 7) = groupe("tournee")
+                    .Cells(ligneResultat, 8) = groupe("secable")
+                    .Cells(ligneResultat, 9) = groupe("samedi")
                 End With
                 ligneResultat = ligneResultat + 1
+                debugInfo = debugInfo & "→ Ligne impairs écrite: " & minImpair & " → " & maxImpair & " (ligne " & (ligneResultat - 1) & ")" & vbCrLf
             End If
         End If
     Next g
-    
-    Exit Sub
-    
-ErreurVoie:
-    ' Ignorer cette voie en cas d'erreur et continuer
 End Sub
 
-Sub TrouverMinMaxArray(ByRef arr As Variant, ByRef minVal As Long, ByRef maxVal As Long)
-    If UBound(arr) < 0 Then Exit Sub
+Sub TrouverMinMaxCollection(ByRef col As Collection, ByRef minVal As Long, ByRef maxVal As Long)
+    If col.Count = 0 Then Exit Sub
     
-    minVal = CLng(arr(0))
-    maxVal = CLng(arr(0))
+    minVal = col(1)
+    maxVal = col(1)
     
     Dim i As Long
-    For i = 1 To UBound(arr)
-        Dim valeur As Long
-        valeur = CLng(arr(i))
-        If valeur < minVal Then minVal = valeur
-        If valeur > maxVal Then maxVal = valeur
+    For i = 2 To col.Count
+        If col(i) < minVal Then minVal = col(i)
+        If col(i) > maxVal Then maxVal = col(i)
     Next i
 End Sub
