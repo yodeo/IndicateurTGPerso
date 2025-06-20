@@ -702,12 +702,12 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
                     ws.Columns(col).ColumnWidth = 25
                 End If
             Case 2 ' Tournée
-                If ws.Columns(col).ColumnWidth < 8 Then
-                    ws.Columns(col).ColumnWidth = 8
+                If ws.Columns(col).ColumnWidth < 5 Then
+                    ws.Columns(col).ColumnWidth = 5
                 End If
             Case Else ' Sécable ou Samedi
-                If ws.Columns(col).ColumnWidth < 8 Then
-                    ws.Columns(col).ColumnWidth = 8
+                If ws.Columns(col).ColumnWidth < 5 Then
+                    ws.Columns(col).ColumnWidth = 5
                 End If
         End Select
     Next col
