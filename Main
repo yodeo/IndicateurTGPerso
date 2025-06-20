@@ -1,6 +1,6 @@
 Sub CalculerBornes()
     '=========================================================================
-    ' VERSION OPTIMISÉE - UTILISE DES DICTIONNAIRES POUR AMÉLIORER LES PERFORMANCES
+    ' VERSION ULTRA-SIMPLIFIÉE - ÉVITE LES DICTIONNAIRES COMPLEXES
     '=========================================================================
     
     Dim ws As Worksheet
@@ -66,169 +66,37 @@ Sub CalculerBornes()
     wsCalcul.Range("A1:I1").Font.Bold = True
     wsCalcul.Range("A1:I1").Interior.Color = RGB(180, 198, 231)
     
-    ' 3. TRAITEMENT OPTIMISÉ : AGGRÉGER LES DONNÉES AVANT LE CALCUL
-    '==========================================================================
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    ' 3. TRAITEMENT DIRECT LIGNE PAR LIGNE
+    '=========================================================================
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).row
     ligneResultat = 2
-
-    ' Charger toutes les données en mémoire pour accélérer l'accès
-    Dim data As Variant
-    data = ws.Range("A1:I" & lastRow).Value
-
-    ' Dictionnaire : clef "Commune|Voie" -> informations agrégées
-    Dim groupes As Object
-    Set groupes = CreateObject("Scripting.Dictionary")
-    Dim ordre As New Collection
-
-    Dim cle As String, g As Object, c As Object
-    Dim tournee As String, secable As String, samedi As String
-    Dim numero As Variant
-
-    For i = 2 To UBound(data, 1)
-        Dim commune As String, voie As String
-        commune = CellToString(data(i, 7))
-        voie = CellToString(data(i, 6))
-        If commune <> "" And voie <> "" Then
-            cle = commune & "|" & voie
-            If Not groupes.Exists(cle) Then
-                Set g = CreateObject("Scripting.Dictionary")
-                g("mot") = CellToString(data(i, 5))
-                g("ligne3") = CellToString(data(i, 3))
-                g("district") = CellToString(data(i, 2))
-                g("tournees") = CreateObject("Scripting.Dictionary")
-                g("secables") = CreateObject("Scripting.Dictionary")
-                g("samedis") = CreateObject("Scripting.Dictionary")
-                g("comb") = CreateObject("Scripting.Dictionary")
-                g("hasNum") = False
-                groupes.Add cle, g
-                ordre.Add cle
-            End If
-
-            Set g = groupes(cle)
-            tournee = CellToString(data(i, 1))
-            secable = CellToString(data(i, 8))
-            samedi = CellToString(data(i, 9))
-            If tournee <> "" Then g("tournees")(tournee) = True
-            If secable <> "" Then g("secables")(secable) = True
-            If samedi <> "" Then g("samedis")(samedi) = True
-
-            numero = data(i, 4)
-            If IsNumeric(numero) And numero > 0 Then
-                g("hasNum") = True
-                Dim combKey As String
-                combKey = tournee & "|" & secable & "|" & samedi
-                If Not g("comb").Exists(combKey) Then
-                    Set c = CreateObject("Scripting.Dictionary")
-                    c("pairs") = New Collection
-                    c("impairs") = New Collection
-                    g("comb").Add combKey, c
-                End If
-                Set c = g("comb")(combKey)
-                If CLng(numero) Mod 2 = 0 Then
-                    c("pairs").Add CLng(numero)
-                Else
-                    c("impairs").Add CLng(numero)
-                End If
+    
+    ' Array pour marquer les voies déjà traitées
+    ReDim voiesTraitees(1 To lastRow) As Boolean
+    
+    ' Parcourir chaque ligne et traiter les voies une par une
+    For i = 2 To lastRow
+        If Not voiesTraitees(i) Then
+            ' Lire les données de cette ligne
+            Dim commune As String, voie As String, motDirecteur As String
+            Dim ligne3 As String, libelleDistrict As String
+            
+            commune = CellToString(ws.Cells(i, 7))
+            voie = CellToString(ws.Cells(i, 6))
+            motDirecteur = CellToString(ws.Cells(i, 5))
+            ligne3 = CellToString(ws.Cells(i, 3))
+            libelleDistrict = CellToString(ws.Cells(i, 2))
+            
+            ' Ignorer si pas de commune ou voie
+            If commune <> "" And voie <> "" Then
+                ' Marquer cette ligne comme traitée
+                voiesTraitees(i) = True
+                
+                ' Traiter cette voie spécifique
+                Call TraiterVoieSimple(ws, wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, ligneResultat, voiesTraitees, lastRow)
             End If
         End If
     Next i
-
-    ' Générer les résultats à partir des données agrégées
-    Dim key As Variant
-    For Each key In ordre
-        Set g = groupes(key)
-        If g("hasNum") Then
-            Dim partsKey() As String
-            partsKey = Split(key, "|")
-            commune = partsKey(0)
-            voie = partsKey(1)
-            Dim motDirecteur As String, ligne3 As String, libelleDistrict As String
-            motDirecteur = g("mot")
-            ligne3 = g("ligne3")
-            libelleDistrict = g("district")
-
-            If g("tournees").Count <= 1 And g("secables").Count <= 1 And g("samedis").Count <= 1 Then
-                tournee = "": If g("tournees").Count > 0 Then tournee = g("tournees").Keys()(0)
-                secable = "": If g("secables").Count > 0 Then secable = g("secables").Keys()(0)
-                samedi = "": If g("samedis").Count > 0 Then samedi = g("samedis").Keys()(0)
-
-                wsCalcul.Cells(ligneResultat, 1) = commune
-                wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-                wsCalcul.Cells(ligneResultat, 3) = voie
-                wsCalcul.Cells(ligneResultat, 4) = ligne3
-                wsCalcul.Cells(ligneResultat, 5) = ""
-                wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-                wsCalcul.Cells(ligneResultat, 7) = tournee
-                wsCalcul.Cells(ligneResultat, 8) = secable
-                wsCalcul.Cells(ligneResultat, 9) = samedi
-                ligneResultat = ligneResultat + 1
-            Else
-                Dim combKey As Variant
-                For Each combKey In g("comb").Keys
-                    Set c = g("comb")(combKey)
-                    Dim bornePairs As String: bornePairs = ""
-                    Dim borneImpairs As String: borneImpairs = ""
-                    Dim minVal As Long, maxVal As Long
-
-                    If c("pairs").Count > 0 Then
-                        minVal = c("pairs")(1)
-                        maxVal = minVal
-                        For j = 2 To c("pairs").Count
-                            If c("pairs")(j) < minVal Then minVal = c("pairs")(j)
-                            If c("pairs")(j) > maxVal Then maxVal = c("pairs")(j)
-                        Next j
-                        If minVal = maxVal Then
-                            bornePairs = CStr(minVal)
-                        Else
-                            bornePairs = minVal & " à " & maxVal
-                        End If
-                    End If
-
-                    If c("impairs").Count > 0 Then
-                        minVal = c("impairs")(1)
-                        maxVal = minVal
-                        For j = 2 To c("impairs").Count
-                            If c("impairs")(j) < minVal Then minVal = c("impairs")(j)
-                            If c("impairs")(j) > maxVal Then maxVal = c("impairs")(j)
-                        Next j
-                        If minVal = maxVal Then
-                            borneImpairs = CStr(minVal)
-                        Else
-                            borneImpairs = minVal & " à " & maxVal
-                        End If
-                    End If
-
-                    Dim borneCombinee As String
-                    If borneImpairs <> "" And bornePairs <> "" Then
-                        borneCombinee = borneImpairs & " / " & bornePairs
-                    ElseIf borneImpairs <> "" Then
-                        borneCombinee = borneImpairs
-                    Else
-                        borneCombinee = bornePairs
-                    End If
-
-                    If borneCombinee <> "" Then
-                        Dim parts() As String
-                        parts = Split(combKey, "|")
-                        tournee = "": If UBound(parts) >= 0 Then tournee = parts(0)
-                        secable = "": If UBound(parts) >= 1 Then secable = parts(1)
-                        samedi = "": If UBound(parts) >= 2 Then samedi = parts(2)
-
-                        wsCalcul.Cells(ligneResultat, 1) = commune
-                        wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-                        wsCalcul.Cells(ligneResultat, 3) = voie
-                        wsCalcul.Cells(ligneResultat, 4) = ligne3
-                        wsCalcul.Cells(ligneResultat, 5) = borneCombinee
-                        wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-                        wsCalcul.Cells(ligneResultat, 7) = tournee
-                        wsCalcul.Cells(ligneResultat, 8) = secable
-                        wsCalcul.Cells(ligneResultat, 9) = samedi
-                        ligneResultat = ligneResultat + 1
-                    End If
-                Next combKey
-            End If
-        End If
-    Next key
     
     ' 4. MISE EN FORME FINALE
     '=========================================================================
