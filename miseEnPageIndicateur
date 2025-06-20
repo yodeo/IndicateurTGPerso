@@ -105,7 +105,7 @@ Sub MiseEnFormeParCommune()
         End If
     Next i
     
-    ' 5. AFFICHAGE DES DONNÉES (TRIÉES)
+    ' 5. AFFICHAGE DES DONNÉES TRIÉES
     '=========================================================================
     ligneActuelle = 1
     
@@ -158,40 +158,6 @@ Sub MiseEnFormeParCommune()
         Dim nbLignesVoies As Long
         nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
         ligneActuelle = ligneActuelle + nbLignesVoies + 1
-    Next cleCommuneeActuelle = CStr(cleCommune)
-        
-        ' Afficher le nom de la commune (fusionné sur toutes les colonnes)
-        Call AfficherNomCommune(wsResultat, communeActuelle, ligneActuelle, nbColonnes)
-        ligneActuelle = ligneActuelle + 1
-        
-        ' Récupérer toutes les voies de cette commune
-        Dim voiesCommune As Object
-        Set voiesCommune = dicCommunes(cleCommune)
-        
-        ' Convertir en array pour pouvoir les répartir
-        ReDim voiesArray(0 To voiesCommune.Count - 1, 0 To 3) As String
-        Dim indexVoie As Long
-        indexVoie = 0
-        
-        Dim cleVoieCommune As Variant
-        For Each cleVoieCommune In voiesCommune.Keys
-            Dim propVoie As Object
-            Set propVoie = voiesCommune(cleVoieCommune)
-            
-            voiesArray(indexVoie, 0) = CStr(cleVoieCommune)
-            voiesArray(indexVoie, 1) = propVoie("tournee")
-            voiesArray(indexVoie, 2) = propVoie("secable")
-            voiesArray(indexVoie, 3) = propVoie("samedi")
-            indexVoie = indexVoie + 1
-        Next cleVoieCommune
-        
-        ' Afficher les voies réparties sur les colonnes
-        Call AfficherVoiesReparties(wsResultat, voiesArray, voiesCommune.Count, ligneActuelle, nbColonnes, wsSource)
-        
-        ' Calculer le nombre de lignes utilisées
-        Dim nbLignesVoies As Long
-        nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesCommune.Count / nbColonnes, 1)
-        ligneActuelle = ligneActuelle + nbLignesVoies + 1 ' +1 pour l'espacement
     Next cleCommune
     
     ' 6. MISE EN FORME FINALE
@@ -257,7 +223,6 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
     ' Stratégie 1: Le mot directeur est au début de la voie
     If InStr(1, voieClean, motDirecteurClean) = 1 Then
         resteVoie = Trim(Mid(resteVoie, Len(motDirecteurClean) + 1))
-        Debug.Print "Suppression au début - Reste: '" & resteVoie & "'"
     End If
     
     ' Stratégie 2: Le mot directeur est à la fin de la voie (comme "ROUTE DU PIC")
@@ -271,13 +236,11 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
             If caracterePrecedent = " " Then
                 ' Enlever le mot directeur de la fin
                 resteVoie = Trim(Left(resteVoie, Len(resteVoie) - Len(motDirecteurClean)))
-                Debug.Print "Suppression à la fin - Reste: '" & resteVoie & "'"
             End If
         End If
     End If
     
     ' Stratégie 3: Le mot directeur est au milieu (avec des prépositions)
-    ' Patterns comme "ROUTE DU PIC", "RUE DES TANINS", etc.
     Dim patterns As Variant
     patterns = Array(" DU " & motDirecteurClean, " DE " & motDirecteurClean, " DES " & motDirecteurClean, _
                     " DE LA " & motDirecteurClean, " DE L'" & motDirecteurClean)
@@ -287,7 +250,6 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
         If InStr(voieClean, patterns(i)) > 0 Then
             resteVoie = Replace(resteVoie, patterns(i), "", 1, 1, vbTextCompare)
             resteVoie = Trim(resteVoie)
-            Debug.Print "Suppression pattern '" & patterns(i) & "' - Reste: '" & resteVoie & "'"
             Exit For
         End If
     Next i
@@ -319,8 +281,6 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
         resteVoie = Trim(Left(resteVoie, Len(resteVoie) - 4))
     End If
     
-    Debug.Print "Reste final après nettoyage: '" & resteVoie & "'"
-    
     ' Construire le format final
     If resteVoie <> "" And UCase(resteVoie) <> motDirecteurClean And Len(resteVoie) > 1 Then
         voieFormatee = motDirecteurClean & " (" & resteVoie & ")"
@@ -333,7 +293,6 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
         voieFormatee = voieFormatee & " " & borne
     End If
     
-    Debug.Print "Résultat final: '" & voieFormatee & "'"
     FormatVoieAvecMotDirecteur = voieFormatee
 End Function
 
@@ -442,8 +401,6 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim aDesNumeros As Boolean
                 aDesNumeros = VoieContientDesNumeros(voieComplete)
                 
-                Debug.Print "Ligne " & ligneActuelle & " - Voie: '" & voiesArray(voieIndex, 0) & "' - A des numéros: " & aDesNumeros
-                
                 ' Mise en forme des cellules
                 With ws.Range(ws.Cells(ligneActuelle, colBase), ws.Cells(ligneActuelle, colBase + 3))
                     .Borders.LineStyle = xlContinuous
@@ -452,7 +409,6 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                     ' Fond vert si la voie contient des numéros
                     If aDesNumeros Then
                         .Interior.Color = RGB(144, 238, 144) ' Vert clair
-                        Debug.Print "Application du fond vert à la ligne " & ligneActuelle
                     Else
                         .Interior.Color = xlNone ' Pas de couleur de fond
                     End If
@@ -461,7 +417,6 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 ' Couleur alternée pour les tournées (seulement si pas de numéros)
                 If voiesArray(voieIndex, 1) <> "" And Not aDesNumeros Then
                     ws.Cells(ligneActuelle, colBase + 1).Interior.Color = RGB(220, 230, 241)
-                    Debug.Print "Application du fond bleu à la tournée ligne " & ligneActuelle
                 End If
                 
                 lettrePrecedente = lettreActuelle
@@ -490,6 +445,11 @@ Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
         Else
             ExtraireMotDirecteur = Trim(voieComplete)
         End If
+    End If
+    
+    ' Enlever le carré s'il est présent
+    If Left(ExtraireMotDirecteur, 2) = "■ " Then
+        ExtraireMotDirecteur = Trim(Mid(ExtraireMotDirecteur, 3))
     End If
 End Function
 
@@ -523,8 +483,6 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
     ' Recherche des patterns comme "1 à 25", "185 à 295", ou numéros isolés
     '=========================================================================
     
-    Debug.Print "Vérification numéros pour: '" & voie & "'"
-    
     VoieContientDesNumeros = False
     
     ' Chercher des patterns de plages de numéros
@@ -538,7 +496,6 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
         For i = 1 To Len(voie)
             If IsNumeric(Mid(voie, i, 1)) Then
                 VoieContientDesNumeros = True
-                Debug.Print "Plage de numéros détectée dans: '" & voie & "'"
                 Exit Function
             End If
         Next i
@@ -554,7 +511,6 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
         ' Vérifier si le dernier mot est un nombre
         If IsNumeric(dernierMot) And Len(dernierMot) > 0 Then
             VoieContientDesNumeros = True
-            Debug.Print "Numéro isolé détecté: '" & dernierMot & "' dans '" & voie & "'"
             Exit Function
         End If
         
@@ -572,7 +528,6 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
             ' Si contient des chiffres et des caractères de borne
             If contientChiffre And (InStr(dernierMot, "à") > 0 Or InStr(dernierMot, "/") > 0 Or InStr(dernierMot, "-") > 0) Then
                 VoieContientDesNumeros = True
-                Debug.Print "Pattern de borne détecté: '" & dernierMot & "' dans '" & voie & "'"
                 Exit Function
             End If
         End If
@@ -595,7 +550,6 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
                 ' Vérifier si c'est un vrai numéro de voie (pas juste dans le code tournée)
                 If Len(numeroEnCours) <= 3 And j > Len(voie) - 10 Then ' Numéro court en fin de chaîne
                     VoieContientDesNumeros = True
-                    Debug.Print "Numéro de voie détecté: '" & numeroEnCours & "' dans '" & voie & "'"
                     Exit Function
                 End If
                 numeroEnCours = ""
@@ -606,10 +560,7 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
     ' Vérifier le dernier numéro si la chaîne se termine par un chiffre
     If Len(numeroEnCours) > 0 And Len(numeroEnCours) <= 3 Then
         VoieContientDesNumeros = True
-        Debug.Print "Numéro final détecté: '" & numeroEnCours & "' dans '" & voie & "'"
     End If
-    
-    Debug.Print "Résultat détection: " & VoieContientDesNumeros
 End Function
 
 Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer)
