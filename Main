@@ -1,6 +1,7 @@
 Sub CalculerBornes()
     '=========================================================================
-    ' VERSION ULTRA-SIMPLIFIÉE - ÉVITE LES DICTIONNAIRES COMPLEXES
+    ' VERSION CORRIGÉE - ÉVITE LES VRAIS CHEVAUCHEMENTS (même parité)
+    ' Créé des plages non-chevauchantes en regroupant les numéros consécutifs
     '=========================================================================
     
     Dim ws As Worksheet
@@ -66,7 +67,7 @@ Sub CalculerBornes()
     wsCalcul.Range("A1:I1").Font.Bold = True
     wsCalcul.Range("A1:I1").Interior.Color = RGB(180, 198, 231)
     
-    ' 3. TRAITEMENT DIRECT LIGNE PAR LIGNE
+    ' 3. TRAITEMENT VOIE PAR VOIE
     '=========================================================================
     lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).row
     ligneResultat = 2
@@ -77,7 +78,6 @@ Sub CalculerBornes()
     ' Parcourir chaque ligne et traiter les voies une par une
     For i = 2 To lastRow
         If Not voiesTraitees(i) Then
-            ' Lire les données de cette ligne
             Dim commune As String, voie As String, motDirecteur As String
             Dim ligne3 As String, libelleDistrict As String
             
@@ -87,13 +87,9 @@ Sub CalculerBornes()
             ligne3 = CellToString(ws.Cells(i, 3))
             libelleDistrict = CellToString(ws.Cells(i, 2))
             
-            ' Ignorer si pas de commune ou voie
             If commune <> "" And voie <> "" Then
-                ' Marquer cette ligne comme traitée
                 voiesTraitees(i) = True
-                
-                ' Traiter cette voie spécifique
-                Call TraiterVoieSimple(ws, wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, ligneResultat, voiesTraitees, lastRow)
+                Call TraiterVoieSansChevaucher(ws, wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, ligneResultat, voiesTraitees, lastRow)
             End If
         End If
     Next i
@@ -116,7 +112,6 @@ Sub CalculerBornes()
 End Sub
 
 Function CellToString(ByVal cell As Range) As String
-    ' Fonction ultra-simple pour convertir une cellule en string
     Dim valeur As Variant
     valeur = cell.value
     
@@ -129,25 +124,16 @@ Function CellToString(ByVal cell As Range) As String
     End If
 End Function
 
-Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
-                      ByVal commune As String, ByVal voie As String, ByVal motDirecteur As String, _
-                      ByVal ligne3 As String, ByVal libelleDistrict As String, _
-                      ByRef ligneResultat As Long, ByRef voiesTraitees() As Boolean, ByVal lastRow As Long)
+Sub TraiterVoieSansChevaucher(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
+                              ByVal commune As String, ByVal voie As String, ByVal motDirecteur As String, _
+                              ByVal ligne3 As String, ByVal libelleDistrict As String, _
+                              ByRef ligneResultat As Long, ByRef voiesTraitees() As Boolean, ByVal lastRow As Long)
     
-    ' Arrays simples pour collecter les données
-    ReDim tournees(1 To 100) As String
-    ReDim secables(1 To 100) As String
-    ReDim samedis(1 To 100) As String
-    ReDim numeros(1 To 1000) As Long
-    ReDim combinaisons(1 To 1000) As String
+    ' Collecter toutes les données de la voie avec leur position dans le fichier
+    ReDim donneesVoie(1 To 1000, 1 To 5) As Variant
+    Dim nbDonnees As Long
+    nbDonnees = 0
     
-    Dim nbTournees As Long, nbSecables As Long, nbSamedis As Long, nbNumeros As Long
-    nbTournees = 0
-    nbSecables = 0
-    nbSamedis = 0
-    nbNumeros = 0
-    
-    ' Parcourir toutes les lignes pour cette voie
     Dim i As Long
     For i = 2 To lastRow
         Dim communeLigne As String, voieLigne As String
@@ -155,238 +141,203 @@ Sub TraiterVoieSimple(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
         voieLigne = CellToString(ws.Cells(i, 6))
         
         If communeLigne = commune And voieLigne = voie Then
-            ' Marquer cette ligne comme traitée
             voiesTraitees(i) = True
             
-            ' Lire les données de distribution
-            Dim tournee As String, secable As String, samedi As String
-            tournee = CellToString(ws.Cells(i, 1))
-            secable = CellToString(ws.Cells(i, 8))
-            samedi = CellToString(ws.Cells(i, 9))
-            
-            ' Collecter les données uniques ET les numéros avec leur combinaison
             Dim numero As Variant
             numero = ws.Cells(i, 4).value
+            
             If IsNumeric(numero) And numero > 0 Then
-                ' SEULEMENT si le numéro est valide, on collecte tout
-                nbNumeros = nbNumeros + 1
-                numeros(nbNumeros) = CLng(numero)
-                combinaisons(nbNumeros) = tournee & "|" & secable & "|" & samedi
-                
-                ' Collecter tournées uniques
-                If tournee <> "" Then
-                    Dim trouveTournee As Boolean
-                    trouveTournee = False
-                    Dim j As Long
-                    For j = 1 To nbTournees
-                        If tournees(j) = tournee Then
-                            trouveTournee = True
-                            Exit For
-                        End If
-                    Next j
-                    If Not trouveTournee Then
-                        nbTournees = nbTournees + 1
-                        tournees(nbTournees) = tournee
-                    End If
-                End If
-                
-                ' Collecter sécables uniques
-                If secable <> "" Then
-                    Dim trouveSecable As Boolean
-                    trouveSecable = False
-                    For j = 1 To nbSecables
-                        If secables(j) = secable Then
-                            trouveSecable = True
-                            Exit For
-                        End If
-                    Next j
-                    If Not trouveSecable Then
-                        nbSecables = nbSecables + 1
-                        secables(nbSecables) = secable
-                    End If
-                End If
-                
-                ' Collecter samedis uniques
-                If samedi <> "" Then
-                    Dim trouveSamedi As Boolean
-                    trouveSamedi = False
-                    For j = 1 To nbSamedis
-                        If samedis(j) = samedi Then
-                            trouveSamedi = True
-                            Exit For
-                        End If
-                    Next j
-                    If Not trouveSamedi Then
-                        nbSamedis = nbSamedis + 1
-                        samedis(nbSamedis) = samedi
-                    End If
-                End If
+                nbDonnees = nbDonnees + 1
+                donneesVoie(nbDonnees, 1) = CellToString(ws.Cells(i, 1)) ' Tournée
+                donneesVoie(nbDonnees, 2) = CellToString(ws.Cells(i, 8)) ' Sécable
+                donneesVoie(nbDonnees, 3) = CellToString(ws.Cells(i, 9)) ' Samedi
+                donneesVoie(nbDonnees, 4) = CLng(numero)                 ' Numéro
+                donneesVoie(nbDonnees, 5) = i                            ' Ligne source (pour tri stable)
             End If
         End If
     Next i
     
-    ' Ne traiter que si on a des numéros valides
-    If nbNumeros > 0 Then
-        ' Déterminer si la voie est complète
-        Dim estComplete As Boolean
-        estComplete = (nbTournees <= 1) And (nbSecables <= 1) And (nbSamedis <= 1)
-        
-        ' Récupérer les valeurs de référence
-        Dim tourneeRef As String, secableRef As String, samediRef As String
-        tourneeRef = ""
-        secableRef = ""
-        samediRef = ""
-        
-        If nbTournees > 0 Then tourneeRef = tournees(1)
-        If nbSecables > 0 Then secableRef = secables(1)
-        If nbSamedis > 0 Then samediRef = samedis(1)
-        
-        If estComplete Then
-            ' VOIE COMPLÈTE : Une ligne sans borne
-            wsCalcul.Cells(ligneResultat, 1) = commune
-            wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-            wsCalcul.Cells(ligneResultat, 3) = voie
-            wsCalcul.Cells(ligneResultat, 4) = ligne3
-            wsCalcul.Cells(ligneResultat, 5) = "" ' Pas de borne
-            wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-            wsCalcul.Cells(ligneResultat, 7) = tourneeRef
-            wsCalcul.Cells(ligneResultat, 8) = secableRef
-            wsCalcul.Cells(ligneResultat, 9) = samediRef
-            ligneResultat = ligneResultat + 1
-            
-        Else
-            ' VOIE PLURI-DISTRIBUÉE : Traiter par combinaison unique
-            ' Créer un array des combinaisons uniques QUI ONT DES NUMÉROS
-            ReDim combinaisonsUniques(1 To 100) As String
-            Dim nbCombinaisonsUniques As Long
-            nbCombinaisonsUniques = 0
-            
-            ' Ne collecter que les combinaisons qui ont des numéros
-            For i = 1 To nbNumeros
-                Dim combinaison As String
-                combinaison = combinaisons(i)
-                
-                ' Vérifier si cette combinaison existe déjà
-                Dim trouveComb As Boolean
-                trouveComb = False
-                For j = 1 To nbCombinaisonsUniques
-                    If combinaisonsUniques(j) = combinaison Then
-                        trouveComb = True
-                        Exit For
-                    End If
-                Next j
-                
-                If Not trouveComb Then
-                    nbCombinaisonsUniques = nbCombinaisonsUniques + 1
-                    combinaisonsUniques(nbCombinaisonsUniques) = combinaison
-                End If
-            Next i
-            
-            ' Traiter chaque combinaison unique (on sait qu'elles ont toutes des numéros)
-            For i = 1 To nbCombinaisonsUniques
-                combinaison = combinaisonsUniques(i)
-                
-                ' Extraire tournée, sécable, samedi de la combinaison
-                Dim parts() As String
-                parts = Split(combinaison, "|")
-                Dim tourneeCombo As String, secableCombo As String, samediCombo As String
-                tourneeCombo = ""
-                secableCombo = ""
-                samediCombo = ""
-                
-                If UBound(parts) >= 0 Then tourneeCombo = parts(0)
-                If UBound(parts) >= 1 Then secableCombo = parts(1)
-                If UBound(parts) >= 2 Then samediCombo = parts(2)
-                
-                ' Collecter les numéros de cette combinaison
-                ReDim numerosPairs(1 To 1000) As Long
-                ReDim numerosImpairs(1 To 1000) As Long
-                Dim nbPairs As Long, nbImpairs As Long
-                nbPairs = 0
-                nbImpairs = 0
-                
-                For j = 1 To nbNumeros
-                    If combinaisons(j) = combinaison Then
-                        If numeros(j) Mod 2 = 0 Then
-                            nbPairs = nbPairs + 1
-                            numerosPairs(nbPairs) = numeros(j)
-                        Else
-                            nbImpairs = nbImpairs + 1
-                            numerosImpairs(nbImpairs) = numeros(j)
-                        End If
-                    End If
-                Next j
-                
-                ' Calculer les bornes pairs et impairs
-                Dim bornePairs As String, borneImpairs As String
-                bornePairs = ""
-                borneImpairs = ""
-                
-                ' Calculer borne des pairs
-                If nbPairs > 0 Then
-                    Dim minPair As Long, maxPair As Long
-                    minPair = numerosPairs(1)
-                    maxPair = numerosPairs(1)
-                    
-                    For j = 2 To nbPairs
-                        If numerosPairs(j) < minPair Then minPair = numerosPairs(j)
-                        If numerosPairs(j) > maxPair Then maxPair = numerosPairs(j)
-                    Next j
-                    
-                    ' Si un seul numéro, pas de flèche
-                    If minPair = maxPair Then
-                        bornePairs = CStr(minPair)
-                    Else
-                        bornePairs = minPair & " à " & maxPair
-                    End If
-                End If
-                
-                ' Calculer borne des impairs
-                If nbImpairs > 0 Then
-                    Dim minImpair As Long, maxImpair As Long
-                    minImpair = numerosImpairs(1)
-                    maxImpair = numerosImpairs(1)
-                    
-                    For j = 2 To nbImpairs
-                        If numerosImpairs(j) < minImpair Then minImpair = numerosImpairs(j)
-                        If numerosImpairs(j) > maxImpair Then maxImpair = numerosImpairs(j)
-                    Next j
-                    
-                    ' Si un seul numéro, pas de flèche
-                    If minImpair = maxImpair Then
-                        borneImpairs = CStr(minImpair)
-                    Else
-                        borneImpairs = minImpair & " à " & maxImpair
-                    End If
-                End If
-                
-                ' Construire la borne combinée : "impairs / pairs"
-                Dim borneCombinee As String
-                If borneImpairs <> "" And bornePairs <> "" Then
-                    borneCombinee = borneImpairs & " / " & bornePairs
-                ElseIf borneImpairs <> "" Then
-                    borneCombinee = borneImpairs
-                ElseIf bornePairs <> "" Then
-                    borneCombinee = bornePairs
-                Else
-                    borneCombinee = ""
-                End If
-                
-                ' Écrire la ligne seulement si on a une borne
-                If borneCombinee <> "" Then
-                    wsCalcul.Cells(ligneResultat, 1) = commune
-                    wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-                    wsCalcul.Cells(ligneResultat, 3) = voie
-                    wsCalcul.Cells(ligneResultat, 4) = ligne3
-                    wsCalcul.Cells(ligneResultat, 5) = borneCombinee
-                    wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-                    wsCalcul.Cells(ligneResultat, 7) = tourneeCombo
-                    wsCalcul.Cells(ligneResultat, 8) = secableCombo
-                    wsCalcul.Cells(ligneResultat, 9) = samediCombo
-                    ligneResultat = ligneResultat + 1
-                End If
-            Next i
-        End If
-    End If
+    If nbDonnees = 0 Then Exit Sub
+    
+    ' Séparer pairs et impairs et créer des groupes consécutifs non-chevauchants
+    Call TraiterParite(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
+                       donneesVoie, nbDonnees, True, ligneResultat)  ' Impairs
+    Call TraiterParite(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
+                       donneesVoie, nbDonnees, False, ligneResultat) ' Pairs
 End Sub
 
+Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal voie As String, _
+                  ByVal motDirecteur As String, ByVal ligne3 As String, ByVal libelleDistrict As String, _
+                  ByRef donneesVoie As Variant, ByVal nbDonnees As Long, ByVal estImpair As Boolean, _
+                  ByRef ligneResultat As Long)
+    
+    ' Filtrer et trier les numéros de la parité demandée
+    ReDim numerosParite(1 To 1000, 1 To 4) As Variant
+    Dim nbParite As Long
+    nbParite = 0
+    
+    Dim i As Long
+    For i = 1 To nbDonnees
+        Dim numero As Long
+        numero = donneesVoie(i, 4)
+        
+        If (estImpair And numero Mod 2 = 1) Or (Not estImpair And numero Mod 2 = 0) Then
+            nbParite = nbParite + 1
+            numerosParite(nbParite, 1) = donneesVoie(i, 1) ' Tournée
+            numerosParite(nbParite, 2) = donneesVoie(i, 2) ' Sécable
+            numerosParite(nbParite, 3) = donneesVoie(i, 3) ' Samedi
+            numerosParite(nbParite, 4) = numero             ' Numéro
+        End If
+    Next i
+    
+    If nbParite = 0 Then Exit Sub
+    
+    ' Trier par numéro croissant
+    Call TrierTableau(numerosParite, nbParite)
+    
+    ' Créer des groupes consécutifs par combinaison tournée/sécable/samedi
+    ' Strategy: parcourir les numéros triés et créer des plages continues par combinaison
+    Dim groupes As Object
+    Set groupes = CreateObject("Scripting.Dictionary")
+    
+    For i = 1 To nbParite
+        Dim tournee As String, secable As String, samedi As String, numero As Long
+        tournee = numerosParite(i, 1)
+        secable = numerosParite(i, 2)
+        samedi = numerosParite(i, 3)
+        numero = numerosParite(i, 4)
+        
+        Dim cleCombo As String
+        cleCombo = tournee & "|" & secable & "|" & samedi
+        
+        If Not groupes.Exists(cleCombo) Then
+            ' Créer un nouveau groupe pour cette combinaison
+            Dim nouveauGroupe As Object
+            Set nouveauGroupe = CreateObject("Scripting.Dictionary")
+            nouveauGroupe.Add "tournee", tournee
+            nouveauGroupe.Add "secable", secable
+            nouveauGroupe.Add "samedi", samedi
+            nouveauGroupe.Add "numeros", CreateObject("System.Collections.ArrayList")
+            groupes.Add cleCombo, nouveauGroupe
+        End If
+        
+        ' Ajouter le numéro au groupe
+        groupes(cleCombo)("numeros").Add numero
+    Next i
+    
+    ' Maintenant, pour chaque groupe, créer des plages non-chevauchantes
+    Dim cleGroupe As Variant
+    For Each cleGroupe In groupes.Keys
+        Dim groupe As Object
+        Set groupe = groupes(cleGroupe)
+        
+        Dim numerosGroupe As Object
+        Set numerosGroupe = groupe("numeros")
+        
+        ' Convertir ArrayList en array VBA et trier
+        ReDim arrayNumeros(0 To numerosGroupe.Count - 1) As Long
+        For i = 0 To numerosGroupe.Count - 1
+            arrayNumeros(i) = numerosGroupe(i)
+        Next i
+        
+        ' Trier les numéros
+        Call TrierArray(arrayNumeros)
+        
+        ' Créer des plages consécutives
+        If UBound(arrayNumeros) >= 0 Then
+            Dim debut As Long, fin As Long
+            debut = arrayNumeros(0)
+            fin = arrayNumeros(0)
+            
+            For i = 1 To UBound(arrayNumeros)
+                ' Si la différence entre parite est plus grande que 2, on crée une nouvelle plage
+                ' Pour les pairs: 2,4,6,8... différence de 2
+                ' Pour les impairs: 1,3,5,7... différence de 2
+                If arrayNumeros(i) - fin > 2 Then
+                    ' Finaliser la plage actuelle
+                    Call EcrireLigneBorne(wsCalcul, commune, motDirecteur, voie, ligne3, libelleDistrict, _
+                                          debut, fin, groupe("tournee"), groupe("secable"), groupe("samedi"), ligneResultat)
+                    
+                    ' Commencer une nouvelle plage
+                    debut = arrayNumeros(i)
+                    fin = arrayNumeros(i)
+                Else
+                    ' Continuer la plage actuelle
+                    fin = arrayNumeros(i)
+                End If
+            Next i
+            
+            ' Écrire la dernière plage
+            Call EcrireLigneBorne(wsCalcul, commune, motDirecteur, voie, ligne3, libelleDistrict, _
+                                  debut, fin, groupe("tournee"), groupe("secable"), groupe("samedi"), ligneResultat)
+        End If
+    Next cleGroupe
+End Sub
+
+Sub EcrireLigneBorne(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal motDirecteur As String, _
+                     ByVal voie As String, ByVal ligne3 As String, ByVal libelleDistrict As String, _
+                     ByVal debut As Long, ByVal fin As Long, ByVal tournee As String, _
+                     ByVal secable As String, ByVal samedi As String, ByRef ligneResultat As Long)
+    
+    Dim borne As String
+    If debut = fin Then
+        borne = CStr(debut)
+    Else
+        borne = debut & " à " & fin
+    End If
+    
+    wsCalcul.Cells(ligneResultat, 1) = commune
+    wsCalcul.Cells(ligneResultat, 2) = motDirecteur
+    wsCalcul.Cells(ligneResultat, 3) = voie
+    wsCalcul.Cells(ligneResultat, 4) = ligne3
+    wsCalcul.Cells(ligneResultat, 5) = borne
+    wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
+    wsCalcul.Cells(ligneResultat, 7) = tournee
+    wsCalcul.Cells(ligneResultat, 8) = secable
+    wsCalcul.Cells(ligneResultat, 9) = samedi
+    
+    ligneResultat = ligneResultat + 1
+End Sub
+
+Sub TrierTableau(ByRef tableau As Variant, ByVal nbElements As Long)
+    ' Tri à bulles simple sur la colonne 4 (numéro)
+    Dim i As Long, j As Long
+    Dim temp1 As Variant, temp2 As Variant, temp3 As Variant, temp4 As Variant
+    
+    For i = 1 To nbElements - 1
+        For j = 1 To nbElements - i
+            If tableau(j, 4) > tableau(j + 1, 4) Then
+                ' Échanger les lignes
+                temp1 = tableau(j, 1)
+                temp2 = tableau(j, 2)
+                temp3 = tableau(j, 3)
+                temp4 = tableau(j, 4)
+                
+                tableau(j, 1) = tableau(j + 1, 1)
+                tableau(j, 2) = tableau(j + 1, 2)
+                tableau(j, 3) = tableau(j + 1, 3)
+                tableau(j, 4) = tableau(j + 1, 4)
+                
+                tableau(j + 1, 1) = temp1
+                tableau(j + 1, 2) = temp2
+                tableau(j + 1, 3) = temp3
+                tableau(j + 1, 4) = temp4
+            End If
+        Next j
+    Next i
+End Sub
+
+Sub TrierArray(ByRef arr As Variant)
+    ' Tri à bulles pour array simple
+    Dim i As Long, j As Long, temp As Long
+    
+    For i = LBound(arr) To UBound(arr) - 1
+        For j = LBound(arr) To UBound(arr) - 1
+            If arr(j) > arr(j + 1) Then
+                temp = arr(j)
+                arr(j) = arr(j + 1)
+                arr(j + 1) = temp
+            End If
+        Next j
+    Next i
+End Sub
