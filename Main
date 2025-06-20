@@ -195,8 +195,19 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
     ' Trier par numéro croissant
     Call TrierTableau(numerosParite, nbParite)
     
-    ' Créer des groupes consécutifs par combinaison tournée/sécable/samedi
-    ' Strategy: parcourir les numéros triés et créer des plages continues par combinaison
+    ' Créer un dictionnaire global de tous les numéros existants pour cette parité
+    Dim tousLesNumerosExistants As Object
+    Set tousLesNumerosExistants = CreateObject("Scripting.Dictionary")
+    
+    For i = 1 To nbParite
+        Dim numeroExistant As Long
+        numeroExistant = numerosParite(i, 4)
+        If Not tousLesNumerosExistants.Exists(numeroExistant) Then
+            tousLesNumerosExistants.Add numeroExistant, True
+        End If
+    Next i
+    
+    ' Créer des groupes par combinaison tournée/sécable/samedi
     Dim groupes As Object
     Set groupes = CreateObject("Scripting.Dictionary")
     
@@ -211,7 +222,6 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
         cleCombo = tournee & "|" & secable & "|" & samedi
         
         If Not groupes.Exists(cleCombo) Then
-            ' Créer un nouveau groupe pour cette combinaison
             Dim nouveauGroupe As Object
             Set nouveauGroupe = CreateObject("Scripting.Dictionary")
             nouveauGroupe.Add "tournee", tournee
@@ -221,11 +231,10 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
             groupes.Add cleCombo, nouveauGroupe
         End If
         
-        ' Ajouter le numéro au groupe
         groupes(cleCombo)("numeros").Add numero
     Next i
     
-    ' Maintenant, pour chaque groupe, créer des plages non-chevauchantes
+    ' Pour chaque groupe, créer des plages intelligentes
     Dim cleGroupe As Variant
     For Each cleGroupe In groupes.Keys
         Dim groupe As Object
@@ -234,36 +243,60 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
         Dim numerosGroupe As Object
         Set numerosGroupe = groupe("numeros")
         
-        ' Convertir ArrayList en array VBA et trier
+        ' Convertir en array et trier
         ReDim arrayNumeros(0 To numerosGroupe.Count - 1) As Long
         For i = 0 To numerosGroupe.Count - 1
             arrayNumeros(i) = numerosGroupe(i)
         Next i
-        
-        ' Trier les numéros
         Call TrierArray(arrayNumeros)
         
-        ' Créer des plages consécutives
+        ' Créer des plages en tenant compte des numéros existants ailleurs
         If UBound(arrayNumeros) >= 0 Then
             Dim debut As Long, fin As Long
             debut = arrayNumeros(0)
             fin = arrayNumeros(0)
             
             For i = 1 To UBound(arrayNumeros)
-                ' Si la différence entre parite est plus grande que 2, on crée une nouvelle plage
-                ' Pour les pairs: 2,4,6,8... différence de 2
-                ' Pour les impairs: 1,3,5,7... différence de 2
-                If arrayNumeros(i) - fin > 2 Then
+                Dim numeroActuel As Long
+                numeroActuel = arrayNumeros(i)
+                
+                ' Vérifier s'il faut continuer la plage ou la couper
+                Dim doitCouper As Boolean
+                doitCouper = False
+                
+                ' Parcourir tous les numéros entre fin et numeroActuel
+                Dim numeroIntermediaire As Long
+                If estImpair Then
+                    ' Pour les impairs, vérifier 1,3,5,7...
+                    For numeroIntermediaire = fin + 2 To numeroActuel - 2 Step 2
+                        If tousLesNumerosExistants.Exists(numeroIntermediaire) Then
+                            ' Ce numéro existe ailleurs, il faut couper la plage
+                            doitCouper = True
+                            Exit For
+                        End If
+                    Next numeroIntermediaire
+                Else
+                    ' Pour les pairs, vérifier 2,4,6,8...
+                    For numeroIntermediaire = fin + 2 To numeroActuel - 2 Step 2
+                        If tousLesNumerosExistants.Exists(numeroIntermediaire) Then
+                            ' Ce numéro existe ailleurs, il faut couper la plage
+                            doitCouper = True
+                            Exit For
+                        End If
+                    Next numeroIntermediaire
+                End If
+                
+                If doitCouper Then
                     ' Finaliser la plage actuelle
                     Call EcrireLigneBorne(wsCalcul, commune, motDirecteur, voie, ligne3, libelleDistrict, _
                                           debut, fin, groupe("tournee"), groupe("secable"), groupe("samedi"), ligneResultat)
                     
                     ' Commencer une nouvelle plage
-                    debut = arrayNumeros(i)
-                    fin = arrayNumeros(i)
+                    debut = numeroActuel
+                    fin = numeroActuel
                 Else
                     ' Continuer la plage actuelle
-                    fin = arrayNumeros(i)
+                    fin = numeroActuel
                 End If
             Next i
             
