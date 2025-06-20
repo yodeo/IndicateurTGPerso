@@ -1,7 +1,8 @@
 Sub CalculerBornes()
     '=========================================================================
-    ' VERSION CORRIGÉE - ÉVITE LES VRAIS CHEVAUCHEMENTS (même parité)
+    ' VERSION CORRIGÉE - GÈRE AUSSI LES VOIES SANS NUMÉROS
     ' Créé des plages non-chevauchantes en regroupant les numéros consécutifs
+    ' ET traite les voies sans numéros
     '=========================================================================
     
     Dim ws As Worksheet
@@ -89,7 +90,7 @@ Sub CalculerBornes()
             
             If commune <> "" And voie <> "" Then
                 voiesTraitees(i) = True
-                Call TraiterVoieSansChevaucher(ws, wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, ligneResultat, voiesTraitees, lastRow)
+                Call TraiterVoieAvecSansNumeros(ws, wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, ligneResultat, voiesTraitees, lastRow)
             End If
         End If
     Next i
@@ -124,15 +125,17 @@ Function CellToString(ByVal cell As Range) As String
     End If
 End Function
 
-Sub TraiterVoieSansChevaucher(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
+Sub TraiterVoieAvecSansNumeros(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet, _
                               ByVal commune As String, ByVal voie As String, ByVal motDirecteur As String, _
                               ByVal ligne3 As String, ByVal libelleDistrict As String, _
                               ByRef ligneResultat As Long, ByRef voiesTraitees() As Boolean, ByVal lastRow As Long)
     
-    ' Collecter toutes les données de la voie avec leur position dans le fichier
-    ReDim donneesVoie(1 To 1000, 1 To 5) As Variant
-    Dim nbDonnees As Long
-    nbDonnees = 0
+    ' Collecter toutes les données de la voie (avec et sans numéros)
+    ReDim donneesAvecNumero(1 To 1000, 1 To 5) As Variant
+    ReDim donneesSansNumero(1 To 1000, 1 To 4) As Variant
+    Dim nbAvecNumero As Long, nbSansNumero As Long
+    nbAvecNumero = 0
+    nbSansNumero = 0
     
     Dim i As Long
     For i = 2 To lastRow
@@ -147,21 +150,82 @@ Sub TraiterVoieSansChevaucher(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet
             numero = ws.Cells(i, 4).value
             
             If IsNumeric(numero) And numero > 0 Then
-                nbDonnees = nbDonnees + 1
-                donneesVoie(nbDonnees, 1) = CellToString(ws.Cells(i, 1)) ' Tournée
-                donneesVoie(nbDonnees, 2) = CellToString(ws.Cells(i, 8)) ' Sécable
-                donneesVoie(nbDonnees, 3) = CellToString(ws.Cells(i, 9)) ' Samedi
-                donneesVoie(nbDonnees, 4) = CLng(numero)                 ' Numéro
-                donneesVoie(nbDonnees, 5) = i                            ' Ligne source (pour tri stable)
+                ' Voie avec numéro
+                nbAvecNumero = nbAvecNumero + 1
+                donneesAvecNumero(nbAvecNumero, 1) = CellToString(ws.Cells(i, 1)) ' Tournée
+                donneesAvecNumero(nbAvecNumero, 2) = CellToString(ws.Cells(i, 8)) ' Sécable
+                donneesAvecNumero(nbAvecNumero, 3) = CellToString(ws.Cells(i, 9)) ' Samedi
+                donneesAvecNumero(nbAvecNumero, 4) = CLng(numero)                 ' Numéro
+                donneesAvecNumero(nbAvecNumero, 5) = i                            ' Ligne source
+            Else
+                ' Voie sans numéro
+                nbSansNumero = nbSansNumero + 1
+                donneesSansNumero(nbSansNumero, 1) = CellToString(ws.Cells(i, 1)) ' Tournée
+                donneesSansNumero(nbSansNumero, 2) = CellToString(ws.Cells(i, 8)) ' Sécable
+                donneesSansNumero(nbSansNumero, 3) = CellToString(ws.Cells(i, 9)) ' Samedi
+                donneesSansNumero(nbSansNumero, 4) = i                            ' Ligne source
             End If
         End If
     Next i
     
-    If nbDonnees = 0 Then Exit Sub
+    ' Traiter les voies avec numéros (comme avant)
+    If nbAvecNumero > 0 Then
+        Call TraiterParCombinaison(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
+                                   donneesAvecNumero, nbAvecNumero, ligneResultat)
+    End If
     
-    ' Traiter par combinaison complète (pairs ET impairs ensemble)
-    Call TraiterParCombinaison(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
-                               donneesVoie, nbDonnees, ligneResultat)
+    ' Traiter les voies sans numéros
+    If nbSansNumero > 0 Then
+        Call TraiterVoiesSansNumeros(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
+                                     donneesSansNumero, nbSansNumero, ligneResultat)
+    End If
+End Sub
+
+Sub TraiterVoiesSansNumeros(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal voie As String, _
+                           ByVal motDirecteur As String, ByVal ligne3 As String, ByVal libelleDistrict As String, _
+                           ByRef donneesSansNumero As Variant, ByVal nbSansNumero As Long, ByRef ligneResultat As Long)
+    
+    ' Créer des groupes par combinaison tournée/sécable/samedi pour les voies sans numéros
+    Dim groupesSansNumero As Object
+    Set groupesSansNumero = CreateObject("Scripting.Dictionary")
+    
+    Dim i As Long
+    For i = 1 To nbSansNumero
+        Dim tournee As String, secable As String, samedi As String
+        tournee = donneesSansNumero(i, 1)
+        secable = donneesSansNumero(i, 2)
+        samedi = donneesSansNumero(i, 3)
+        
+        Dim cleCombo As String
+        cleCombo = tournee & "|" & secable & "|" & samedi
+        
+        If Not groupesSansNumero.Exists(cleCombo) Then
+            Dim nouveauGroupe As Object
+            Set nouveauGroupe = CreateObject("Scripting.Dictionary")
+            nouveauGroupe.Add "tournee", tournee
+            nouveauGroupe.Add "secable", secable
+            nouveauGroupe.Add "samedi", samedi
+            groupesSansNumero.Add cleCombo, nouveauGroupe
+        End If
+    Next i
+    
+    ' Créer une ligne pour chaque combinaison unique
+    Dim cleGroupe As Variant
+    For Each cleGroupe In groupesSansNumero.Keys
+        Dim groupe As Object
+        Set groupe = groupesSansNumero(cleGroupe)
+        
+        wsCalcul.Cells(ligneResultat, 1) = commune
+        wsCalcul.Cells(ligneResultat, 2) = motDirecteur
+        wsCalcul.Cells(ligneResultat, 3) = voie
+        wsCalcul.Cells(ligneResultat, 4) = ligne3
+        wsCalcul.Cells(ligneResultat, 5) = "" ' Pas de borne pour voie sans numéro
+        wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
+        wsCalcul.Cells(ligneResultat, 7) = groupe("tournee")
+        wsCalcul.Cells(ligneResultat, 8) = groupe("secable")
+        wsCalcul.Cells(ligneResultat, 9) = groupe("samedi")
+        ligneResultat = ligneResultat + 1
+    Next cleGroupe
 End Sub
 
 Sub TraiterParCombinaison(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal voie As String, _
