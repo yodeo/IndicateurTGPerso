@@ -243,23 +243,38 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
         Dim numerosGroupe As Object
         Set numerosGroupe = groupe("numeros")
         
-        ' Convertir en array et trier
-        ReDim arrayNumeros(0 To numerosGroupe.Count - 1) As Long
+        ' Convertir en array et éliminer les doublons
+        Dim dictTemp As Object
+        Set dictTemp = CreateObject("Scripting.Dictionary")
+        
         For i = 0 To numerosGroupe.Count - 1
-            arrayNumeros(i) = numerosGroupe(i)
+            Dim numTemp As Long
+            numTemp = numerosGroupe(i)
+            If Not dictTemp.Exists(numTemp) Then
+                dictTemp.Add numTemp, True
+            End If
         Next i
+        
+        ' Créer l'array final sans doublons
+        ReDim arrayNumeros(0 To dictTemp.Count - 1) As Long
+        Dim index As Long
+        index = 0
+        Dim cle As Variant
+        For Each cle In dictTemp.Keys
+            arrayNumeros(index) = CLng(cle)
+            index = index + 1
+        Next cle
+        
         Call TrierArray(arrayNumeros)
         
         ' Créer des plages continues, coupées seulement si un numéro intermédiaire existe dans une autre combinaison
         If UBound(arrayNumeros) >= 0 Then
-            ' Créer UNE SEULE FOIS le dictionnaire des numéros de CETTE combinaison
+            ' Créer le dictionnaire des numéros de CETTE combinaison (maintenant sans doublons)
             Dim numerosDeCetteCombinaison As Object
             Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
             Dim j As Long
             For j = 0 To UBound(arrayNumeros)
-                If Not numerosDeCetteCombinaison.Exists(arrayNumeros(j)) Then
-                    numerosDeCetteCombinaison.Add arrayNumeros(j), True
-                End If
+                numerosDeCetteCombinaison.Add arrayNumeros(j), True
             Next j
             
             Dim debut As Long, fin As Long
