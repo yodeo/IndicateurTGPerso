@@ -159,49 +159,23 @@ Sub TraiterVoieSansChevaucher(ByRef ws As Worksheet, ByRef wsCalcul As Worksheet
     
     If nbDonnees = 0 Then Exit Sub
     
-    ' Séparer pairs et impairs et créer des groupes consécutifs non-chevauchants
-    Call TraiterParite(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
-                       donneesVoie, nbDonnees, True, ligneResultat)  ' Impairs
-    Call TraiterParite(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
-                       donneesVoie, nbDonnees, False, ligneResultat) ' Pairs
+    ' Traiter par combinaison complète (pairs ET impairs ensemble)
+    Call TraiterParCombinaison(wsCalcul, commune, voie, motDirecteur, ligne3, libelleDistrict, _
+                               donneesVoie, nbDonnees, ligneResultat)
 End Sub
 
-Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal voie As String, _
-                  ByVal motDirecteur As String, ByVal ligne3 As String, ByVal libelleDistrict As String, _
-                  ByRef donneesVoie As Variant, ByVal nbDonnees As Long, ByVal estImpair As Boolean, _
-                  ByRef ligneResultat As Long)
+Sub TraiterParCombinaison(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal voie As String, _
+                          ByVal motDirecteur As String, ByVal ligne3 As String, ByVal libelleDistrict As String, _
+                          ByRef donneesVoie As Variant, ByVal nbDonnees As Long, ByRef ligneResultat As Long)
     
-    ' Filtrer et trier les numéros de la parité demandée
-    ReDim numerosParite(1 To 1000, 1 To 4) As Variant
-    Dim nbParite As Long
-    nbParite = 0
-    
-    Dim i As Long
-    For i = 1 To nbDonnees
-        Dim numero As Long
-        numero = donneesVoie(i, 4)
-        
-        If (estImpair And numero Mod 2 = 1) Or (Not estImpair And numero Mod 2 = 0) Then
-            nbParite = nbParite + 1
-            numerosParite(nbParite, 1) = donneesVoie(i, 1) ' Tournée
-            numerosParite(nbParite, 2) = donneesVoie(i, 2) ' Sécable
-            numerosParite(nbParite, 3) = donneesVoie(i, 3) ' Samedi
-            numerosParite(nbParite, 4) = numero             ' Numéro
-        End If
-    Next i
-    
-    If nbParite = 0 Then Exit Sub
-    
-    ' Trier par numéro croissant
-    Call TrierTableau(numerosParite, nbParite)
-    
-    ' Créer un dictionnaire global de tous les numéros existants pour cette parité
+    ' Créer un dictionnaire global de tous les numéros existants
     Dim tousLesNumerosExistants As Object
     Set tousLesNumerosExistants = CreateObject("Scripting.Dictionary")
     
-    For i = 1 To nbParite
+    Dim i As Long
+    For i = 1 To nbDonnees
         Dim numeroExistant As Long
-        numeroExistant = numerosParite(i, 4)
+        numeroExistant = donneesVoie(i, 4)
         If Not tousLesNumerosExistants.Exists(numeroExistant) Then
             tousLesNumerosExistants.Add numeroExistant, True
         End If
@@ -211,12 +185,12 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
     Dim groupes As Object
     Set groupes = CreateObject("Scripting.Dictionary")
     
-    For i = 1 To nbParite
+    For i = 1 To nbDonnees
         Dim tournee As String, secable As String, samedi As String, numero As Long
-        tournee = numerosParite(i, 1)
-        secable = numerosParite(i, 2)
-        samedi = numerosParite(i, 3)
-        numero = numerosParite(i, 4)
+        tournee = donneesVoie(i, 1)
+        secable = donneesVoie(i, 2)
+        samedi = donneesVoie(i, 3)
+        numero = donneesVoie(i, 4)
         
         Dim cleCombo As String
         cleCombo = tournee & "|" & secable & "|" & samedi
@@ -227,147 +201,156 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
             nouveauGroupe.Add "tournee", tournee
             nouveauGroupe.Add "secable", secable
             nouveauGroupe.Add "samedi", samedi
-            nouveauGroupe.Add "numeros", CreateObject("System.Collections.ArrayList")
+            nouveauGroupe.Add "pairs", CreateObject("System.Collections.ArrayList")
+            nouveauGroupe.Add "impairs", CreateObject("System.Collections.ArrayList")
             groupes.Add cleCombo, nouveauGroupe
         End If
         
-        groupes(cleCombo)("numeros").Add numero
+        ' Séparer pairs et impairs
+        If numero Mod 2 = 0 Then
+            groupes(cleCombo)("pairs").Add numero
+        Else
+            groupes(cleCombo)("impairs").Add numero
+        End If
     Next i
     
-    ' Pour chaque groupe, créer des plages intelligentes
+    ' Pour chaque combinaison, calculer les bornes pairs et impairs et les combiner
     Dim cleGroupe As Variant
     For Each cleGroupe In groupes.Keys
         Dim groupe As Object
         Set groupe = groupes(cleGroupe)
         
-        Dim numerosGroupe As Object
-        Set numerosGroupe = groupe("numeros")
+        ' Calculer la borne pour les impairs
+        Dim borneImpairs As String
+        borneImpairs = CalculerBornePourParite(groupe("impairs"), True, tousLesNumerosExistants)
         
-        ' Convertir en array et éliminer les doublons
-        Dim dictTemp As Object
-        Set dictTemp = CreateObject("Scripting.Dictionary")
+        ' Calculer la borne pour les pairs
+        Dim bornePairs As String
+        bornePairs = CalculerBornePourParite(groupe("pairs"), False, tousLesNumerosExistants)
         
-        For i = 0 To numerosGroupe.Count - 1
-            Dim numTemp As Long
-            numTemp = numerosGroupe(i)
-            If Not dictTemp.Exists(numTemp) Then
-                dictTemp.Add numTemp, True
-            End If
-        Next i
+        ' Combiner les bornes
+        Dim borneCombinee As String
+        If borneImpairs <> "" And bornePairs <> "" Then
+            borneCombinee = borneImpairs & " / " & bornePairs
+        ElseIf borneImpairs <> "" Then
+            borneCombinee = borneImpairs
+        ElseIf bornePairs <> "" Then
+            borneCombinee = bornePairs
+        Else
+            borneCombinee = ""
+        End If
         
-        ' Créer l'array final sans doublons
-        ReDim arrayNumeros(0 To dictTemp.Count - 1) As Long
-        Dim index As Long
-        index = 0
-        Dim cle As Variant
-        For Each cle In dictTemp.Keys
-            arrayNumeros(index) = CLng(cle)
-            index = index + 1
-        Next cle
-        
-        Call TrierArray(arrayNumeros)
-        
-        ' Créer des plages continues, coupées seulement si un numéro intermédiaire existe dans une autre combinaison
-        If UBound(arrayNumeros) >= 0 Then
-            ' Créer le dictionnaire des numéros de CETTE combinaison (maintenant sans doublons)
-            Dim numerosDeCetteCombinaison As Object
-            Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
-            Dim j As Long
-            For j = 0 To UBound(arrayNumeros)
-                numerosDeCetteCombinaison.Add arrayNumeros(j), True
-            Next j
-            
-            Dim debut As Long, fin As Long
-            debut = arrayNumeros(0)
-            fin = arrayNumeros(0)
-            
-            For i = 1 To UBound(arrayNumeros)
-                Dim numeroActuel As Long
-                numeroActuel = arrayNumeros(i)
-                
-                ' Vérifier s'il y a des numéros de cette parité qui existent dans D'AUTRES combinaisons
-                ' entre fin et numeroActuel
-                Dim doitCouper As Boolean
-                doitCouper = False
-                Dim numeroOuCouper As Long
-                numeroOuCouper = 0
-                
-                ' Parcourir tous les numéros de cette parité entre fin et numeroActuel
-                Dim numeroIntermediaire As Long
-                Dim pas As Long
-                pas = IIf(estImpair, 2, 2) ' Pas de 2 pour pairs et impairs
-                
-                For numeroIntermediaire = fin + pas To numeroActuel - pas Step pas
-                    ' Si ce numéro intermédiaire existe dans les données globales
-                    ' ET qu'il n'appartient PAS à cette combinaison
-                    If tousLesNumerosExistants.Exists(numeroIntermediaire) And _
-                       Not numerosDeCetteCombinaison.Exists(numeroIntermediaire) Then
-                        ' Ce numéro appartient à une autre combinaison, il faut couper
-                        doitCouper = True
-                        numeroOuCouper = numeroIntermediaire
-                        Exit For
-                    End If
-                Next numeroIntermediaire
-                
-                If doitCouper Then
-                    ' Ajuster la fin de la plage actuelle pour s'arrêter juste avant le conflit
-                    Dim nouvelleFin As Long
-                    If estImpair Then
-                        nouvelleFin = numeroOuCouper - 2
-                    Else
-                        nouvelleFin = numeroOuCouper - 2
-                    End If
-                    
-                    ' S'assurer que nouvelleFin >= debut et <= fin actuel
-                    If nouvelleFin >= debut And nouvelleFin <= fin Then
-                        fin = nouvelleFin
-                    End If
-                    
-                    ' Finaliser la plage actuelle
-                    Call EcrireLigneBorne(wsCalcul, commune, motDirecteur, voie, ligne3, libelleDistrict, _
-                                          debut, fin, groupe("tournee"), groupe("secable"), groupe("samedi"), ligneResultat)
-                    
-                    ' Commencer une nouvelle plage à partir du numéro actuel
-                    debut = numeroActuel
-                    fin = numeroActuel
-                Else
-                    ' Aucun conflit détecté, continuer la plage jusqu'au numéro actuel
-                    ' (même s'il y a des "trous" naturels)
-                    fin = numeroActuel
-                End If
-            Next i
-            
-            ' Écrire la dernière plage
-            Call EcrireLigneBorne(wsCalcul, commune, motDirecteur, voie, ligne3, libelleDistrict, _
-                                  debut, fin, groupe("tournee"), groupe("secable"), groupe("samedi"), ligneResultat)
+        ' Écrire la ligne combinée
+        If borneCombinee <> "" Then
+            wsCalcul.Cells(ligneResultat, 1) = commune
+            wsCalcul.Cells(ligneResultat, 2) = motDirecteur
+            wsCalcul.Cells(ligneResultat, 3) = voie
+            wsCalcul.Cells(ligneResultat, 4) = ligne3
+            wsCalcul.Cells(ligneResultat, 5) = borneCombinee
+            wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
+            wsCalcul.Cells(ligneResultat, 7) = groupe("tournee")
+            wsCalcul.Cells(ligneResultat, 8) = groupe("secable")
+            wsCalcul.Cells(ligneResultat, 9) = groupe("samedi")
+            ligneResultat = ligneResultat + 1
         End If
     Next cleGroupe
 End Sub
 
-Sub EcrireLigneBorne(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal motDirecteur As String, _
-                     ByVal voie As String, ByVal ligne3 As String, ByVal libelleDistrict As String, _
-                     ByVal debut As Long, ByVal fin As Long, ByVal tournee As String, _
-                     ByVal secable As String, ByVal samedi As String, ByRef ligneResultat As Long)
+Function CalculerBornePourParite(ByRef numerosParite As Object, ByVal estImpair As Boolean, _
+                                 ByRef tousLesNumerosExistants As Object) As String
     
-    Dim borne As String
-    If debut = fin Then
-        borne = CStr(debut)
-    Else
-        borne = debut & " à " & fin
+    If numerosParite.Count = 0 Then
+        CalculerBornePourParite = ""
+        Exit Function
     End If
     
-    wsCalcul.Cells(ligneResultat, 1) = commune
-    wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-    wsCalcul.Cells(ligneResultat, 3) = voie
-    wsCalcul.Cells(ligneResultat, 4) = ligne3
-    wsCalcul.Cells(ligneResultat, 5) = borne
-    wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-    wsCalcul.Cells(ligneResultat, 7) = tournee
-    wsCalcul.Cells(ligneResultat, 8) = secable
-    wsCalcul.Cells(ligneResultat, 9) = samedi
+    ' Éliminer les doublons et convertir en array
+    Dim dictTemp As Object
+    Set dictTemp = CreateObject("Scripting.Dictionary")
     
-    ligneResultat = ligneResultat + 1
-End Sub
+    Dim i As Long
+    For i = 0 To numerosParite.Count - 1
+        Dim numTemp As Long
+        numTemp = numerosParite(i)
+        If Not dictTemp.Exists(numTemp) Then
+            dictTemp.Add numTemp, True
+        End If
+    Next i
+    
+    ' Créer l'array final sans doublons
+    ReDim arrayNumeros(0 To dictTemp.Count - 1) As Long
+    Dim index As Long
+    index = 0
+    Dim cle As Variant
+    For Each cle In dictTemp.Keys
+        arrayNumeros(index) = CLng(cle)
+        index = index + 1
+    Next cle
+    
+    Call TrierArray(arrayNumeros)
+    
+    ' Créer le dictionnaire des numéros de cette parité pour cette combinaison
+    Dim numerosDeCetteCombinaison As Object
+    Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
+    For i = 0 To UBound(arrayNumeros)
+        numerosDeCetteCombinaison.Add arrayNumeros(i), True
+    Next i
+    
+    ' Créer des plages continues
+    Dim plages As String
+    plages = ""
+    
+    If UBound(arrayNumeros) >= 0 Then
+        Dim debut As Long, fin As Long
+        debut = arrayNumeros(0)
+        fin = arrayNumeros(0)
+        
+        For i = 1 To UBound(arrayNumeros)
+            Dim numeroActuel As Long
+            numeroActuel = arrayNumeros(i)
+            
+            ' Vérifier s'il y a conflit avec d'autres combinaisons
+            Dim doitCouper As Boolean
+            doitCouper = False
+            
+            Dim numeroIntermediaire As Long
+            For numeroIntermediaire = fin + 2 To numeroActuel - 2 Step 2
+                If tousLesNumerosExistants.Exists(numeroIntermediaire) And _
+                   Not numerosDeCetteCombinaison.Exists(numeroIntermediaire) Then
+                    doitCouper = True
+                    Exit For
+                End If
+            Next numeroIntermediaire
+            
+            If doitCouper Then
+                ' Finaliser la plage actuelle
+                If plages <> "" Then plages = plages & ", "
+                If debut = fin Then
+                    plages = plages & CStr(debut)
+                Else
+                    plages = plages & debut & " à " & fin
+                End If
+                
+                ' Commencer une nouvelle plage
+                debut = numeroActuel
+                fin = numeroActuel
+            Else
+                ' Continuer la plage
+                fin = numeroActuel
+            End If
+        Next i
+        
+        ' Ajouter la dernière plage
+        If plages <> "" Then plages = plages & ", "
+        If debut = fin Then
+            plages = plages & CStr(debut)
+        Else
+            plages = plages & debut & " à " & fin
+        End If
+    End If
+    
+    CalculerBornePourParite = plages
+End Function
 
 Sub TrierTableau(ByRef tableau As Variant, ByVal nbElements As Long)
     ' Tri à bulles simple sur la colonne 4 (numéro)
