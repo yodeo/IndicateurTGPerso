@@ -687,7 +687,7 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
     If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
     If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
     
-    ' Ajuster automatiquement les colonnes de voies, forcer les autres
+    ' Ajuster automatiquement les colonnes de voies, forcer les autres en points
     Dim col As Integer
     For col = 1 To nbColonnes * nbChampsParColonne
         Dim colType As Integer
@@ -699,10 +699,10 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
                 If ws.Columns(col).ColumnWidth < 25 Then
                     ws.Columns(col).ColumnWidth = 25
                 End If
-            Case 2 ' Tournée - Largeur forcée
-                ws.Columns(col).ColumnWidth = 5
-            Case Else ' Sécable ou Samedi - Largeur forcée
-                ws.Columns(col).ColumnWidth = 5
+            Case 2 ' Tournée - Largeur forcée à 5 points (40 pixels)
+                ws.Columns(col).Width = 40 ' 40 pixels = 5 points
+            Case Else ' Sécable ou Samedi - Largeur forcée à 5 points (40 pixels)
+                ws.Columns(col).Width = 40 ' 40 pixels = 5 points
         End Select
     Next col
     
