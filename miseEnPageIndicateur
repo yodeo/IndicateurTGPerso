@@ -2,6 +2,7 @@ Sub MiseEnFormeParCommune()
     '=========================================================================
     ' MISE EN FORME DES DONNÉES PAR COMMUNE
     ' Regroupe les voies par commune et les affiche sur le nombre de colonnes choisi
+    ' Format des voies : MOT_DIRECTEUR (reste de la voie) bornes
     '=========================================================================
     
     Dim wsSource As Worksheet
@@ -81,12 +82,9 @@ Sub MiseEnFormeParCommune()
         samedi = Trim(CStr(wsSource.Cells(i, 9).Value))
         
         If commune <> "" And voie <> "" Then
-            ' Créer la clé unique pour la voie
+            ' Créer la clé formatée pour la voie avec le mot directeur
             Dim cleVoie As String
-            cleVoie = motDirecteur & " " & voie
-            If borne <> "" Then
-                cleVoie = cleVoie & " (" & borne & ")"
-            End If
+            cleVoie = FormatVoieAvecMotDirecteur(motDirecteur, voie, borne)
             
             ' Ajouter à la commune
             If Not dicCommunes.Exists(commune) Then
@@ -163,6 +161,36 @@ Sub MiseEnFormeParCommune()
            "Communes traitées : " & dicCommunes.Count & vbCrLf & _
            "Affichage sur " & nbColonnes & " colonne(s)", vbInformation
 End Sub
+
+Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As String, ByVal borne As String) As String
+    '=========================================================================
+    ' FORMATAGE DU NOM DE VOIE AVEC MOT DIRECTEUR
+    ' Format : MOTDIRECTEUR (reste de la voie) bornes
+    '=========================================================================
+    Dim voieFormatee As String
+    Dim resteVoie As String
+    
+    ' Enlever le mot directeur du début de la voie si présent
+    If UCase(Left(voie, Len(motDirecteur))) = UCase(motDirecteur) Then
+        resteVoie = Trim(Mid(voie, Len(motDirecteur) + 1))
+    Else
+        resteVoie = voie
+    End If
+    
+    ' Construire le format final
+    If resteVoie <> "" Then
+        voieFormatee = UCase(motDirecteur) & " (" & resteVoie & ")"
+    Else
+        voieFormatee = UCase(motDirecteur)
+    End If
+    
+    ' Ajouter les bornes si présentes
+    If borne <> "" Then
+        voieFormatee = voieFormatee & " " & borne
+    End If
+    
+    FormatVoieAvecMotDirecteur = voieFormatee
+End Function
 
 Sub CreerEntetes(ByRef ws As Worksheet, ByVal nbColonnes As Integer)
     '=========================================================================
