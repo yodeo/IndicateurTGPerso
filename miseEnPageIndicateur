@@ -105,7 +105,7 @@ Sub MiseEnFormeParCommune()
         End If
     Next i
     
-    ' 5. AFFICHAGE DES DONNÉES
+    ' 5. AFFICHAGE DES DONNÉES (TRIÉES)
     '=========================================================================
     ligneActuelle = 1
     
@@ -113,11 +113,52 @@ Sub MiseEnFormeParCommune()
     Call CreerEntetes(wsResultat, nbColonnes)
     ligneActuelle = 3 ' Commencer après les en-têtes
     
-    ' Parcourir chaque commune
+    ' Trier les communes alphabétiquement
+    Dim communesTriees As Object
+    Set communesTriees = TrierDictionnaire(dicCommunes)
+    
+    ' Parcourir chaque commune (triée)
     Dim cleCommune As Variant
-    For Each cleCommune In dicCommunes.Keys
+    For Each cleCommune In communesTriees.Keys
         Dim communeActuelle As String
         communeActuelle = CStr(cleCommune)
+        
+        ' Afficher le nom de la commune (fusionné sur toutes les colonnes)
+        Call AfficherNomCommune(wsResultat, communeActuelle, ligneActuelle, nbColonnes)
+        ligneActuelle = ligneActuelle + 1
+        
+        ' Récupérer et trier les voies de cette commune
+        Dim voiesCommune As Object
+        Set voiesCommune = dicCommunes(cleCommune)
+        
+        Dim voiesTriees As Object
+        Set voiesTriees = TrierDictionnaire(voiesCommune)
+        
+        ' Convertir en array pour pouvoir les répartir
+        ReDim voiesArray(0 To voiesTriees.Count - 1, 0 To 3) As String
+        Dim indexVoie As Long
+        indexVoie = 0
+        
+        Dim cleVoieCommune As Variant
+        For Each cleVoieCommune In voiesTriees.Keys
+            Dim propVoie As Object
+            Set propVoie = voiesTriees(cleVoieCommune)
+            
+            voiesArray(indexVoie, 0) = CStr(cleVoieCommune)
+            voiesArray(indexVoie, 1) = propVoie("tournee")
+            voiesArray(indexVoie, 2) = propVoie("secable")
+            voiesArray(indexVoie, 3) = propVoie("samedi")
+            indexVoie = indexVoie + 1
+        Next cleVoieCommune
+        
+        ' Afficher les voies réparties sur les colonnes
+        Call AfficherVoiesReparties(wsResultat, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource)
+        
+        ' Calculer le nombre de lignes utilisées
+        Dim nbLignesVoies As Long
+        nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
+        ligneActuelle = ligneActuelle + nbLignesVoies + 1 ' +1 pour l'espacement
+    Next cleCommuneeActuelle = CStr(cleCommune)
         
         ' Afficher le nom de la commune (fusionné sur toutes les colonnes)
         Call AfficherNomCommune(wsResultat, communeActuelle, ligneActuelle, nbColonnes)
@@ -158,9 +199,42 @@ Sub MiseEnFormeParCommune()
     Call AppliquerMiseEnForme(wsResultat, nbColonnes)
     
     MsgBox "Mise en forme terminée !" & vbCrLf & _
-           "Communes traitées : " & dicCommunes.Count & vbCrLf & _
+           "Communes traitées : " & communesTriees.Count & vbCrLf & _
            "Affichage sur " & nbColonnes & " colonne(s)", vbInformation
 End Sub
+
+Function TrierDictionnaire(ByRef dicOriginal As Object) As Object
+    '=========================================================================
+    ' TRIE UN DICTIONNAIRE PAR ORDRE ALPHABÉTIQUE DES CLÉS
+    '=========================================================================
+    Dim dicTrie As Object
+    Set dicTrie = CreateObject("Scripting.Dictionary")
+    
+    ' Convertir les clés en array pour les trier
+    Dim cles As Variant
+    cles = dicOriginal.Keys
+    
+    ' Tri à bulles des clés
+    Dim i As Long, j As Long
+    Dim temp As Variant
+    
+    For i = LBound(cles) To UBound(cles) - 1
+        For j = LBound(cles) To UBound(cles) - 1
+            If UCase(CStr(cles(j))) > UCase(CStr(cles(j + 1))) Then
+                temp = cles(j)
+                cles(j) = cles(j + 1)
+                cles(j + 1) = temp
+            End If
+        Next j
+    Next i
+    
+    ' Reconstruire le dictionnaire trié
+    For i = LBound(cles) To UBound(cles)
+        dicTrie.Add cles(i), dicOriginal(cles(i))
+    Next i
+    
+    Set TrierDictionnaire = dicTrie
+End Function
 
 Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As String, ByVal borne As String) As String
     '=========================================================================
@@ -313,10 +387,15 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
     '=========================================================================
     ' AFFICHAGE DES VOIES RÉPARTIES SUR LES COLONNES
     ' Avec fond vert si la voie contient des numéros (bornes)
+    ' Avec mise en forme spéciale pour le mot directeur et changement de lettre
     '=========================================================================
     Dim voieIndex As Long
     Dim ligne As Long, col As Integer
     Dim maxLignes As Long
+    Dim lettreActuelle As String
+    Dim lettrePrecedente As String
+    
+    lettrePrecedente = ""
     
     ' Calculer le nombre maximum de lignes nécessaires
     maxLignes = Application.WorksheetFunction.Ceiling_Precise(nbVoies / nbColonnes, 1)
@@ -331,15 +410,37 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim ligneActuelle As Long
                 ligneActuelle = ligneDebut + ligne
                 
+                ' Extraire le mot directeur de la voie
+                Dim voieComplete As String
+                voieComplete = CStr(voiesArray(voieIndex, 0))
+                Dim motDirecteur As String
+                motDirecteur = ExtraireMotDirecteur(voieComplete)
+                
+                ' Détecter changement de première lettre
+                lettreActuelle = UCase(Left(motDirecteur, 1))
+                Dim changementLettre As Boolean
+                changementLettre = (lettreActuelle <> lettrePrecedente And lettrePrecedente <> "")
+                
+                ' Formater la voie avec indicateur de changement de lettre
+                Dim voieFormatee As String
+                If changementLettre Then
+                    voieFormatee = "■ " & voieComplete ' Carré noir pour le changement
+                Else
+                    voieFormatee = voieComplete
+                End If
+                
                 ' Écrire les données de la voie
-                ws.Cells(ligneActuelle, colBase) = voiesArray(voieIndex, 0)     ' Voie
+                ws.Cells(ligneActuelle, colBase) = voieFormatee
                 ws.Cells(ligneActuelle, colBase + 1) = voiesArray(voieIndex, 1) ' Tournée
                 ws.Cells(ligneActuelle, colBase + 2) = voiesArray(voieIndex, 2) ' Sécable
                 ws.Cells(ligneActuelle, colBase + 3) = voiesArray(voieIndex, 3) ' Samedi
                 
+                ' Mise en forme du mot directeur en gras
+                Call MettreMotDirecteurEnGras(ws.Cells(ligneActuelle, colBase), motDirecteur)
+                
                 ' Vérifier s'il y a des numéros (bornes) dans la voie
                 Dim aDesNumeros As Boolean
-                aDesNumeros = VoieContientDesNumeros(CStr(voiesArray(voieIndex, 0)))
+                aDesNumeros = VoieContientDesNumeros(voieComplete)
                 
                 Debug.Print "Ligne " & ligneActuelle & " - Voie: '" & voiesArray(voieIndex, 0) & "' - A des numéros: " & aDesNumeros
                 
@@ -363,23 +464,70 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                     Debug.Print "Application du fond bleu à la tournée ligne " & ligneActuelle
                 End If
                 
+                lettrePrecedente = lettreActuelle
                 voieIndex = voieIndex + 1
             End If
         Next col
     Next ligne
 End Sub
 
+Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
+    '=========================================================================
+    ' EXTRAIT LE MOT DIRECTEUR D'UNE VOIE FORMATÉE
+    ' Ex: "PIC (ROUTE) 25" → "PIC"
+    '=========================================================================
+    Dim posParenthese As Integer
+    posParenthese = InStr(voieComplete, " (")
+    
+    If posParenthese > 0 Then
+        ExtraireMotDirecteur = Trim(Left(voieComplete, posParenthese - 1))
+    Else
+        ' Si pas de parenthèses, prendre le premier mot
+        Dim mots As Variant
+        mots = Split(Trim(voieComplete), " ")
+        If UBound(mots) >= 0 Then
+            ExtraireMotDirecteur = Trim(mots(0))
+        Else
+            ExtraireMotDirecteur = Trim(voieComplete)
+        End If
+    End If
+End Function
+
+Sub MettreMotDirecteurEnGras(ByRef cellule As Range, ByVal motDirecteur As String)
+    '=========================================================================
+    ' MET LE MOT DIRECTEUR EN GRAS DANS LA CELLULE
+    '=========================================================================
+    Dim texteComplet As String
+    Dim positionDebut As Integer
+    Dim longueurMot As Integer
+    
+    texteComplet = cellule.Value
+    
+    ' Chercher la position du mot directeur dans le texte
+    positionDebut = InStr(1, texteComplet, motDirecteur, vbTextCompare)
+    
+    If positionDebut > 0 Then
+        longueurMot = Len(motDirecteur)
+        
+        ' Mettre en gras seulement le mot directeur
+        With cellule.Characters(positionDebut, longueurMot).Font
+            .Bold = True
+            .Size = cellule.Font.Size ' Garder la même taille
+        End With
+    End If
+End Sub
+
 Function VoieContientDesNumeros(ByVal voie As String) As Boolean
     '=========================================================================
     ' VÉRIFIE SI UNE VOIE CONTIENT DES NUMÉROS (BORNES)
-    ' Recherche des patterns comme "1 à 25", "185 à 295", etc.
+    ' Recherche des patterns comme "1 à 25", "185 à 295", ou numéros isolés
     '=========================================================================
     
     Debug.Print "Vérification numéros pour: '" & voie & "'"
     
     VoieContientDesNumeros = False
     
-    ' Chercher des patterns de numéros spécifiques aux bornes
+    ' Chercher des patterns de plages de numéros
     If InStr(voie, " à ") > 0 Or _
        InStr(voie, " / ") > 0 Or _
        InStr(voie, "à") > 0 Or _
@@ -390,22 +538,75 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
         For i = 1 To Len(voie)
             If IsNumeric(Mid(voie, i, 1)) Then
                 VoieContientDesNumeros = True
-                Debug.Print "Numéros détectés dans: '" & voie & "'"
+                Debug.Print "Plage de numéros détectée dans: '" & voie & "'"
                 Exit Function
             End If
         Next i
     End If
     
-    ' Chercher aussi des numéros isolés en fin de chaîne
-    Dim derniersMots As String
+    ' Chercher des numéros isolés (après un espace à la fin)
     Dim mots As Variant
-    mots = Split(voie, " ")
+    mots = Split(Trim(voie), " ")
     If UBound(mots) >= 0 Then
-        derniersMots = mots(UBound(mots))
-        If IsNumeric(derniersMots) Or InStr(derniersMots, "à") > 0 Then
+        Dim dernierMot As String
+        dernierMot = Trim(mots(UBound(mots)))
+        
+        ' Vérifier si le dernier mot est un nombre
+        If IsNumeric(dernierMot) And Len(dernierMot) > 0 Then
             VoieContientDesNumeros = True
-            Debug.Print "Numéros détectés en fin: '" & voie & "'"
+            Debug.Print "Numéro isolé détecté: '" & dernierMot & "' dans '" & voie & "'"
+            Exit Function
         End If
+        
+        ' Vérifier si le dernier mot contient des chiffres et ressemble à une borne
+        If Len(dernierMot) > 0 Then
+            Dim contientChiffre As Boolean
+            contientChiffre = False
+            For i = 1 To Len(dernierMot)
+                If IsNumeric(Mid(dernierMot, i, 1)) Then
+                    contientChiffre = True
+                    Exit For
+                End If
+            Next i
+            
+            ' Si contient des chiffres et des caractères de borne
+            If contientChiffre And (InStr(dernierMot, "à") > 0 Or InStr(dernierMot, "/") > 0 Or InStr(dernierMot, "-") > 0) Then
+                VoieContientDesNumeros = True
+                Debug.Print "Pattern de borne détecté: '" & dernierMot & "' dans '" & voie & "'"
+                Exit Function
+            End If
+        End If
+    End If
+    
+    ' Chercher n'importe quel groupe de chiffres dans la chaîne (pour les cas comme TM0001 25)
+    Dim j As Integer
+    Dim numeroEnCours As String
+    numeroEnCours = ""
+    
+    For j = 1 To Len(voie)
+        Dim char As String
+        char = Mid(voie, j, 1)
+        
+        If IsNumeric(char) Then
+            numeroEnCours = numeroEnCours & char
+        Else
+            ' Si on a trouvé un nombre et qu'on arrive à un non-chiffre
+            If Len(numeroEnCours) > 0 Then
+                ' Vérifier si c'est un vrai numéro de voie (pas juste dans le code tournée)
+                If Len(numeroEnCours) <= 3 And j > Len(voie) - 10 Then ' Numéro court en fin de chaîne
+                    VoieContientDesNumeros = True
+                    Debug.Print "Numéro de voie détecté: '" & numeroEnCours & "' dans '" & voie & "'"
+                    Exit Function
+                End If
+                numeroEnCours = ""
+            End If
+        End If
+    Next j
+    
+    ' Vérifier le dernier numéro si la chaîne se termine par un chiffre
+    If Len(numeroEnCours) > 0 And Len(numeroEnCours) <= 3 Then
+        VoieContientDesNumeros = True
+        Debug.Print "Numéro final détecté: '" & numeroEnCours & "' dans '" & voie & "'"
     End If
     
     Debug.Print "Résultat détection: " & VoieContientDesNumeros
