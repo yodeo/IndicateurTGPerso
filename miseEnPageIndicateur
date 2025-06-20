@@ -192,10 +192,10 @@ Sub MiseEnFormeParCommune()
         ' Afficher les voies
         Call AfficherVoiesReparties(wsResultat, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
         
-        ' Calculer le nombre de lignes utilisées
+        ' Calculer le nombre de lignes utilisées (sans ligne vide entre communes)
         Dim nbLignesVoies As Long
         nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
-        ligneActuelle = ligneActuelle + nbLignesVoies + 1
+        ligneActuelle = ligneActuelle + nbLignesVoies
     Next cleCommune
     
     ' 7. MISE EN FORME FINALE
@@ -453,18 +453,12 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim changementLettre As Boolean
                 changementLettre = (lettreActuelle <> lettrePrecedente And lettrePrecedente <> "")
                 
-                Debug.Print "Voie: " & motDirecteur & " - Lettre actuelle: '" & lettreActuelle & "' - Lettre précédente: '" & lettrePrecedente & "' - Changement: " & changementLettre
-                
                 ' Formater la voie avec indicateur de changement de lettre
                 Dim voieFormatee As String
                 If changementLettre Then
-                    voieFormatee = "■ " & voieComplete ' Carré noir pour TOUT changement
-                    Debug.Print "CARRÉ AJOUTÉ pour changement " & lettrePrecedente & " → " & lettreActuelle
+                    voieFormatee = "■ " & voieComplete ' Carré noir pour le changement
                 Else
                     voieFormatee = voieComplete
-                    If lettrePrecedente <> "" Then
-                        Debug.Print "Pas de carré - même lettre " & lettreActuelle
-                    End If
                 End If
                 
                 ' Écrire les données selon les options
@@ -498,7 +492,7 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim aDesNumeros As Boolean
                 aDesNumeros = VoieContientDesNumeros(voieComplete)
                 
-                ' Mise en forme des cellules
+                ' Mise en forme des cellules avec alignement
                 With ws.Range(ws.Cells(ligneActuelle, colBase), ws.Cells(ligneActuelle, colBase + nbChampsParColonne - 1))
                     .Borders.LineStyle = xlContinuous
                     .VerticalAlignment = xlCenter
@@ -511,14 +505,27 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                     End If
                 End With
                 
+                ' Alignement spécifique pour chaque type de colonne
+                ws.Cells(ligneActuelle, colBase).HorizontalAlignment = xlLeft ' Voie à gauche
+                ws.Cells(ligneActuelle, colBase + 1).HorizontalAlignment = xlCenter ' Tournée centrée
+                
+                Dim colIndexAlign As Integer
+                colIndexAlign = colBase + 2
+                If afficherSecable Then
+                    ws.Cells(ligneActuelle, colIndexAlign).HorizontalAlignment = xlCenter ' Sécable centrée
+                    colIndexAlign = colIndexAlign + 1
+                End If
+                
+                If afficherSamedi Then
+                    ws.Cells(ligneActuelle, colIndexAlign).HorizontalAlignment = xlCenter ' Samedi centrée
+                End If
+                
                 ' Couleur alternée pour les tournées (seulement si pas de numéros)
                 If voiesArray(voieIndex, 1) <> "" And Not aDesNumeros Then
                     ws.Cells(ligneActuelle, colBase + 1).Interior.Color = RGB(220, 230, 241)
                 End If
                 
-                ' Mettre à jour la lettre précédente APRÈS traitement
                 lettrePrecedente = lettreActuelle
-                Debug.Print "Lettre précédente mise à jour : '" & lettrePrecedente & "'"
                 voieIndex = voieIndex + 1
             End If
         Next col
@@ -672,27 +679,48 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
     If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
     If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
     
-    ' Ajuster la largeur des colonnes
+    ' Ajuster automatiquement toutes les colonnes à leur contenu
     Dim col As Integer
+    For col = 1 To nbColonnes * nbChampsParColonne
+        ws.Columns(col).AutoFit
+        
+        ' Définir des largeurs minimales pour la lisibilité
+        Dim colType As Integer
+        colType = ((col - 1) Mod nbChampsParColonne) + 1
+        
+        Select Case colType
+            Case 1 ' Voie
+                If ws.Columns(col).ColumnWidth < 25 Then
+                    ws.Columns(col).ColumnWidth = 25
+                End If
+            Case 2 ' Tournée
+                If ws.Columns(col).ColumnWidth < 8 Then
+                    ws.Columns(col).ColumnWidth = 8
+                End If
+            Case Else ' Sécable ou Samedi
+                If ws.Columns(col).ColumnWidth < 8 Then
+                    ws.Columns(col).ColumnWidth = 8
+                End If
+        End Select
+    Next col
+    
+    ' Centrer horizontalement les en-têtes des colonnes Tournée, Sécable et Samedi
     For col = 1 To nbColonnes
         Dim colBase As Integer
         colBase = (col - 1) * nbChampsParColonne + 1
         
-        Dim colIndex As Integer
-        colIndex = colBase
+        ' Tournée (toujours colBase + 1)
+        ws.Cells(1, colBase + 1).HorizontalAlignment = xlCenter
         
-        ws.Columns(colIndex).ColumnWidth = 35      ' Voie
-        colIndex = colIndex + 1
-        ws.Columns(colIndex).ColumnWidth = 10      ' Tournée
-        colIndex = colIndex + 1
-        
+        Dim colIndexHeader As Integer
+        colIndexHeader = colBase + 2
         If afficherSecable Then
-            ws.Columns(colIndex).ColumnWidth = 10  ' Sécable
-            colIndex = colIndex + 1
+            ws.Cells(1, colIndexHeader).HorizontalAlignment = xlCenter ' En-tête Sécable
+            colIndexHeader = colIndexHeader + 1
         End If
         
         If afficherSamedi Then
-            ws.Columns(colIndex).ColumnWidth = 10  ' Samedi
+            ws.Cells(1, colIndexHeader).HorizontalAlignment = xlCenter ' En-tête Samedi
         End If
     Next col
     
