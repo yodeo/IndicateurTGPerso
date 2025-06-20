@@ -171,37 +171,50 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
     Dim voieFormatee As String
     Dim resteVoie As String
     
-    ' Nettoyer et normaliser les chaînes pour la comparaison
+    ' Debug - afficher les valeurs reçues
+    Debug.Print "Mot directeur: '" & motDirecteur & "' - Voie: '" & voie & "'"
+    
+    ' Nettoyer et normaliser les chaînes
     Dim motDirecteurClean As String
     Dim voieClean As String
     motDirecteurClean = UCase(Trim(motDirecteur))
     voieClean = UCase(Trim(voie))
     
-    ' Chercher et enlever le mot directeur du début de la voie
-    If Left(voieClean, Len(motDirecteurClean)) = motDirecteurClean Then
-        ' Enlever le mot directeur et les espaces/caractères de liaison
+    ' Différentes stratégies pour extraire le reste de la voie
+    resteVoie = voie
+    
+    ' Stratégie 1: Le mot directeur est au début
+    If InStr(1, voieClean, motDirecteurClean) = 1 Then
         resteVoie = Trim(Mid(voie, Len(motDirecteur) + 1))
-        ' Enlever les prépositions courantes au début
-        If Left(UCase(resteVoie), 3) = "DE " Then
-            resteVoie = Trim(Mid(resteVoie, 4))
-        ElseIf Left(UCase(resteVoie), 3) = "DU " Then
-            resteVoie = Trim(Mid(resteVoie, 4))
-        ElseIf Left(UCase(resteVoie), 4) = "DES " Then
-            resteVoie = Trim(Mid(resteVoie, 5))
-        ElseIf Left(UCase(resteVoie), 3) = "LA " Then
-            resteVoie = Trim(Mid(resteVoie, 4))
-        ElseIf Left(UCase(resteVoie), 3) = "LE " Then
-            resteVoie = Trim(Mid(resteVoie, 4))
-        ElseIf Left(UCase(resteVoie), 4) = "LES " Then
-            resteVoie = Trim(Mid(resteVoie, 5))
-        End If
-    Else
-        ' Si le mot directeur n'est pas au début, on garde toute la voie
-        resteVoie = voie
+        Debug.Print "Stratégie 1 - Reste après suppression: '" & resteVoie & "'"
+    ' Stratégie 2: Chercher le mot directeur n'importe où dans la voie
+    ElseIf InStr(voieClean, motDirecteurClean) > 0 Then
+        ' Remplacer le mot directeur par rien
+        resteVoie = Replace(voie, motDirecteur, "", 1, 1, vbTextCompare)
+        resteVoie = Trim(resteVoie)
+        Debug.Print "Stratégie 2 - Reste après remplacement: '" & resteVoie & "'"
     End If
     
+    ' Nettoyer les prépositions au début
+    resteVoie = Trim(resteVoie)
+    If Left(UCase(resteVoie), 3) = "DE " Then
+        resteVoie = Trim(Mid(resteVoie, 4))
+    ElseIf Left(UCase(resteVoie), 3) = "DU " Then
+        resteVoie = Trim(Mid(resteVoie, 4))
+    ElseIf Left(UCase(resteVoie), 4) = "DES " Then
+        resteVoie = Trim(Mid(resteVoie, 5))
+    ElseIf Left(UCase(resteVoie), 3) = "LA " Then
+        resteVoie = Trim(Mid(resteVoie, 4))
+    ElseIf Left(UCase(resteVoie), 3) = "LE " Then
+        resteVoie = Trim(Mid(resteVoie, 4))
+    ElseIf Left(UCase(resteVoie), 4) = "LES " Then
+        resteVoie = Trim(Mid(resteVoie, 5))
+    End If
+    
+    Debug.Print "Reste final après nettoyage: '" & resteVoie & "'"
+    
     ' Construire le format final
-    If resteVoie <> "" And UCase(resteVoie) <> UCase(motDirecteur) Then
+    If resteVoie <> "" And UCase(resteVoie) <> UCase(motDirecteur) And Len(resteVoie) > 2 Then
         voieFormatee = UCase(motDirecteur) & " (" & resteVoie & ")"
     Else
         voieFormatee = UCase(motDirecteur)
@@ -212,6 +225,7 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
         voieFormatee = voieFormatee & " " & borne
     End If
     
+    Debug.Print "Résultat final: '" & voieFormatee & "'"
     FormatVoieAvecMotDirecteur = voieFormatee
 End Function
 
@@ -293,6 +307,8 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim aDesNumeros As Boolean
                 aDesNumeros = VoieContientDesNumeros(CStr(voiesArray(voieIndex, 0)))
                 
+                Debug.Print "Ligne " & ligneActuelle & " - Voie: '" & voiesArray(voieIndex, 0) & "' - A des numéros: " & aDesNumeros
+                
                 ' Mise en forme des cellules
                 With ws.Range(ws.Cells(ligneActuelle, colBase), ws.Cells(ligneActuelle, colBase + 3))
                     .Borders.LineStyle = xlContinuous
@@ -301,12 +317,16 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                     ' Fond vert si la voie contient des numéros
                     If aDesNumeros Then
                         .Interior.Color = RGB(144, 238, 144) ' Vert clair
+                        Debug.Print "Application du fond vert à la ligne " & ligneActuelle
+                    Else
+                        .Interior.Color = xlNone ' Pas de couleur de fond
                     End If
                 End With
                 
                 ' Couleur alternée pour les tournées (seulement si pas de numéros)
                 If voiesArray(voieIndex, 1) <> "" And Not aDesNumeros Then
                     ws.Cells(ligneActuelle, colBase + 1).Interior.Color = RGB(220, 230, 241)
+                    Debug.Print "Application du fond bleu à la tournée ligne " & ligneActuelle
                 End If
                 
                 voieIndex = voieIndex + 1
@@ -320,21 +340,41 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
     ' VÉRIFIE SI UNE VOIE CONTIENT DES NUMÉROS (BORNES)
     ' Recherche des patterns comme "1 à 25", "185 à 295", etc.
     '=========================================================================
+    
+    Debug.Print "Vérification numéros pour: '" & voie & "'"
+    
     VoieContientDesNumeros = False
     
-    ' Chercher des patterns de numéros
+    ' Chercher des patterns de numéros spécifiques aux bornes
     If InStr(voie, " à ") > 0 Or _
        InStr(voie, " / ") > 0 Or _
-       InStr(voie, "à") > 0 Then
+       InStr(voie, "à") > 0 Or _
+       InStr(voie, "/") > 0 Then
+        
         ' Vérifier qu'il y a des chiffres
         Dim i As Integer
         For i = 1 To Len(voie)
             If IsNumeric(Mid(voie, i, 1)) Then
                 VoieContientDesNumeros = True
+                Debug.Print "Numéros détectés dans: '" & voie & "'"
                 Exit Function
             End If
         Next i
     End If
+    
+    ' Chercher aussi des numéros isolés en fin de chaîne
+    Dim derniersMots As String
+    Dim mots As Variant
+    mots = Split(voie, " ")
+    If UBound(mots) >= 0 Then
+        derniersMots = mots(UBound(mots))
+        If IsNumeric(derniersMots) Or InStr(derniersMots, "à") > 0 Then
+            VoieContientDesNumeros = True
+            Debug.Print "Numéros détectés en fin: '" & voie & "'"
+        End If
+    End If
+    
+    Debug.Print "Résultat détection: " & VoieContientDesNumeros
 End Function
 
 Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer)
