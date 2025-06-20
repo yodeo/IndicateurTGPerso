@@ -250,7 +250,7 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
         Next i
         Call TrierArray(arrayNumeros)
         
-        ' Créer des plages en tenant compte des numéros existants ailleurs
+        ' Créer des plages continues, coupées seulement si un numéro intermédiaire existe dans une autre combinaison
         If UBound(arrayNumeros) >= 0 Then
             Dim debut As Long, fin As Long
             debut = arrayNumeros(0)
@@ -260,42 +260,62 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
                 Dim numeroActuel As Long
                 numeroActuel = arrayNumeros(i)
                 
-                ' Vérifier s'il faut continuer la plage ou la couper
+                ' Vérifier s'il y a des numéros de cette parité qui existent dans D'AUTRES combinaisons
+                ' entre fin et numeroActuel
                 Dim doitCouper As Boolean
                 doitCouper = False
+                Dim numeroOuCouper As Long
+                numeroOuCouper = 0
                 
-                ' Parcourir tous les numéros entre fin et numeroActuel
+                ' Créer un dictionnaire des numéros de CETTE combinaison pour vérification
+                Dim numerosDeCetteCombinaison As Object
+                Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
+                Dim j As Long
+                For j = 0 To UBound(arrayNumeros)
+                    numerosDeCetteCombinaison.Add arrayNumeros(j), True
+                Next j
+                
+                ' Parcourir tous les numéros de cette parité entre fin et numeroActuel
                 Dim numeroIntermediaire As Long
-                If estImpair Then
-                    ' Pour les impairs, vérifier 1,3,5,7...
-                    For numeroIntermediaire = fin + 2 To numeroActuel - 2 Step 2
-                        If tousLesNumerosExistants.Exists(numeroIntermediaire) Then
-                            ' Ce numéro existe ailleurs, il faut couper la plage
-                            doitCouper = True
-                            Exit For
-                        End If
-                    Next numeroIntermediaire
-                Else
-                    ' Pour les pairs, vérifier 2,4,6,8...
-                    For numeroIntermediaire = fin + 2 To numeroActuel - 2 Step 2
-                        If tousLesNumerosExistants.Exists(numeroIntermediaire) Then
-                            ' Ce numéro existe ailleurs, il faut couper la plage
-                            doitCouper = True
-                            Exit For
-                        End If
-                    Next numeroIntermediaire
-                End If
+                Dim pas As Long
+                pas = IIf(estImpair, 2, 2) ' Pas de 2 pour pairs et impairs
+                
+                For numeroIntermediaire = fin + pas To numeroActuel - pas Step pas
+                    ' Si ce numéro intermédiaire existe dans les données globales
+                    ' ET qu'il n'appartient PAS à cette combinaison
+                    If tousLesNumerosExistants.Exists(numeroIntermediaire) And _
+                       Not numerosDeCetteCombinaison.Exists(numeroIntermediaire) Then
+                        ' Ce numéro appartient à une autre combinaison, il faut couper
+                        doitCouper = True
+                        numeroOuCouper = numeroIntermediaire
+                        Exit For
+                    End If
+                Next numeroIntermediaire
                 
                 If doitCouper Then
+                    ' Ajuster la fin de la plage actuelle pour s'arrêter juste avant le conflit
+                    Dim nouvelleFin As Long
+                    If estImpair Then
+                        nouvelleFin = numeroOuCouper - 2
+                    Else
+                        nouvelleFin = numeroOuCouper - 2
+                    End If
+                    
+                    ' S'assurer que nouvelleFin >= debut et <= fin actuel
+                    If nouvelleFin >= debut And nouvelleFin <= fin Then
+                        fin = nouvelleFin
+                    End If
+                    
                     ' Finaliser la plage actuelle
                     Call EcrireLigneBorne(wsCalcul, commune, motDirecteur, voie, ligne3, libelleDistrict, _
                                           debut, fin, groupe("tournee"), groupe("secable"), groupe("samedi"), ligneResultat)
                     
-                    ' Commencer une nouvelle plage
+                    ' Commencer une nouvelle plage à partir du numéro actuel
                     debut = numeroActuel
                     fin = numeroActuel
                 Else
-                    ' Continuer la plage actuelle
+                    ' Aucun conflit détecté, continuer la plage jusqu'au numéro actuel
+                    ' (même s'il y a des "trous" naturels)
                     fin = numeroActuel
                 End If
             Next i
