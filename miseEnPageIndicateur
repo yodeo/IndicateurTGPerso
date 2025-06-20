@@ -687,28 +687,22 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
     If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
     If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
     
-    ' Ajuster automatiquement toutes les colonnes à leur contenu
+    ' Ajuster automatiquement les colonnes de voies, forcer les autres
     Dim col As Integer
     For col = 1 To nbColonnes * nbChampsParColonne
-        ws.Columns(col).AutoFit
-        
-        ' Définir des largeurs minimales pour la lisibilité
         Dim colType As Integer
         colType = ((col - 1) Mod nbChampsParColonne) + 1
         
         Select Case colType
-            Case 1 ' Voie
+            Case 1 ' Voie - AutoFit avec minimum
+                ws.Columns(col).AutoFit
                 If ws.Columns(col).ColumnWidth < 25 Then
                     ws.Columns(col).ColumnWidth = 25
                 End If
-            Case 2 ' Tournée
-                If ws.Columns(col).ColumnWidth < 5 Then
-                    ws.Columns(col).ColumnWidth = 5
-                End If
-            Case Else ' Sécable ou Samedi
-                If ws.Columns(col).ColumnWidth < 5 Then
-                    ws.Columns(col).ColumnWidth = 5
-                End If
+            Case 2 ' Tournée - Largeur forcée
+                ws.Columns(col).ColumnWidth = 5
+            Case Else ' Sécable ou Samedi - Largeur forcée
+                ws.Columns(col).ColumnWidth = 5
         End Select
     Next col
     
