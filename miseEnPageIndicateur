@@ -145,7 +145,7 @@ Sub MiseEnFormeParCommune()
         Next cleVoieCommune
         
         ' Afficher les voies réparties sur les colonnes
-        Call AfficherVoiesReparties(wsResultat, voiesArray, voiesCommune.Count, ligneActuelle, nbColonnes)
+        Call AfficherVoiesReparties(wsResultat, voiesArray, voiesCommune.Count, ligneActuelle, nbColonnes, wsSource)
         
         ' Calculer le nombre de lignes utilisées
         Dim nbLignesVoies As Long
@@ -166,19 +166,42 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
     '=========================================================================
     ' FORMATAGE DU NOM DE VOIE AVEC MOT DIRECTEUR
     ' Format : MOTDIRECTEUR (reste de la voie) bornes
+    ' Évite la répétition du mot directeur dans les parenthèses
     '=========================================================================
     Dim voieFormatee As String
     Dim resteVoie As String
     
-    ' Enlever le mot directeur du début de la voie si présent
-    If UCase(Left(voie, Len(motDirecteur))) = UCase(motDirecteur) Then
+    ' Nettoyer et normaliser les chaînes pour la comparaison
+    Dim motDirecteurClean As String
+    Dim voieClean As String
+    motDirecteurClean = UCase(Trim(motDirecteur))
+    voieClean = UCase(Trim(voie))
+    
+    ' Chercher et enlever le mot directeur du début de la voie
+    If Left(voieClean, Len(motDirecteurClean)) = motDirecteurClean Then
+        ' Enlever le mot directeur et les espaces/caractères de liaison
         resteVoie = Trim(Mid(voie, Len(motDirecteur) + 1))
+        ' Enlever les prépositions courantes au début
+        If Left(UCase(resteVoie), 3) = "DE " Then
+            resteVoie = Trim(Mid(resteVoie, 4))
+        ElseIf Left(UCase(resteVoie), 3) = "DU " Then
+            resteVoie = Trim(Mid(resteVoie, 4))
+        ElseIf Left(UCase(resteVoie), 4) = "DES " Then
+            resteVoie = Trim(Mid(resteVoie, 5))
+        ElseIf Left(UCase(resteVoie), 3) = "LA " Then
+            resteVoie = Trim(Mid(resteVoie, 4))
+        ElseIf Left(UCase(resteVoie), 3) = "LE " Then
+            resteVoie = Trim(Mid(resteVoie, 4))
+        ElseIf Left(UCase(resteVoie), 4) = "LES " Then
+            resteVoie = Trim(Mid(resteVoie, 5))
+        End If
     Else
+        ' Si le mot directeur n'est pas au début, on garde toute la voie
         resteVoie = voie
     End If
     
     ' Construire le format final
-    If resteVoie <> "" Then
+    If resteVoie <> "" And UCase(resteVoie) <> UCase(motDirecteur) Then
         voieFormatee = UCase(motDirecteur) & " (" & resteVoie & ")"
     Else
         voieFormatee = UCase(motDirecteur)
@@ -238,9 +261,10 @@ Sub AfficherNomCommune(ByRef ws As Worksheet, ByVal commune As String, ByVal lig
 End Sub
 
 Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, ByVal nbVoies As Long, _
-                          ByRef ligneDebut As Long, ByVal nbColonnes As Integer)
+                          ByRef ligneDebut As Long, ByVal nbColonnes As Integer, ByRef wsSource As Worksheet)
     '=========================================================================
     ' AFFICHAGE DES VOIES RÉPARTIES SUR LES COLONNES
+    ' Avec fond vert si la voie contient des numéros (bornes)
     '=========================================================================
     Dim voieIndex As Long
     Dim ligne As Long, col As Integer
@@ -265,14 +289,23 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 ws.Cells(ligneActuelle, colBase + 2) = voiesArray(voieIndex, 2) ' Sécable
                 ws.Cells(ligneActuelle, colBase + 3) = voiesArray(voieIndex, 3) ' Samedi
                 
+                ' Vérifier s'il y a des numéros (bornes) dans la voie
+                Dim aDesNumeros As Boolean
+                aDesNumeros = VoieContientDesNumeros(CStr(voiesArray(voieIndex, 0)))
+                
                 ' Mise en forme des cellules
                 With ws.Range(ws.Cells(ligneActuelle, colBase), ws.Cells(ligneActuelle, colBase + 3))
                     .Borders.LineStyle = xlContinuous
                     .VerticalAlignment = xlCenter
+                    
+                    ' Fond vert si la voie contient des numéros
+                    If aDesNumeros Then
+                        .Interior.Color = RGB(144, 238, 144) ' Vert clair
+                    End If
                 End With
                 
-                ' Couleur alternée pour les tournées
-                If voiesArray(voieIndex, 1) <> "" Then
+                ' Couleur alternée pour les tournées (seulement si pas de numéros)
+                If voiesArray(voieIndex, 1) <> "" And Not aDesNumeros Then
                     ws.Cells(ligneActuelle, colBase + 1).Interior.Color = RGB(220, 230, 241)
                 End If
                 
@@ -281,6 +314,28 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
         Next col
     Next ligne
 End Sub
+
+Function VoieContientDesNumeros(ByVal voie As String) As Boolean
+    '=========================================================================
+    ' VÉRIFIE SI UNE VOIE CONTIENT DES NUMÉROS (BORNES)
+    ' Recherche des patterns comme "1 à 25", "185 à 295", etc.
+    '=========================================================================
+    VoieContientDesNumeros = False
+    
+    ' Chercher des patterns de numéros
+    If InStr(voie, " à ") > 0 Or _
+       InStr(voie, " / ") > 0 Or _
+       InStr(voie, "à") > 0 Then
+        ' Vérifier qu'il y a des chiffres
+        Dim i As Integer
+        For i = 1 To Len(voie)
+            If IsNumeric(Mid(voie, i, 1)) Then
+                VoieContientDesNumeros = True
+                Exit Function
+            End If
+        Next i
+    End If
+End Function
 
 Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer)
     '=========================================================================
