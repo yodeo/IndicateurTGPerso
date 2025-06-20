@@ -214,46 +214,67 @@ Sub TraiterParCombinaison(ByRef wsCalcul As Worksheet, ByVal commune As String, 
         End If
     Next i
     
-    ' Pour chaque combinaison, calculer les bornes pairs et impairs et les combiner
-    Dim cleGroupe As Variant
-    For Each cleGroupe In groupes.Keys
-        Dim groupe As Object
-        Set groupe = groupes(cleGroupe)
+    ' VÉRIFIER SI LA VOIE EST ENTIÈREMENT DISTRIBUÉE PAR UNE SEULE COMBINAISON
+    If groupes.Count = 1 Then
+        ' Voie complète : une seule combinaison, pas besoin de bornes
+        Dim cleUnique As Variant
+        cleUnique = groupes.Keys()(0)
+        Dim groupeUnique As Object
+        Set groupeUnique = groupes(cleUnique)
         
-        ' Calculer la borne pour les impairs
-        Dim borneImpairs As String
-        borneImpairs = CalculerBornePourParite(groupe("impairs"), True, tousLesNumerosExistants)
+        wsCalcul.Cells(ligneResultat, 1) = commune
+        wsCalcul.Cells(ligneResultat, 2) = motDirecteur
+        wsCalcul.Cells(ligneResultat, 3) = voie
+        wsCalcul.Cells(ligneResultat, 4) = ligne3
+        wsCalcul.Cells(ligneResultat, 5) = "" ' Pas de borne pour voie complète
+        wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
+        wsCalcul.Cells(ligneResultat, 7) = groupeUnique("tournee")
+        wsCalcul.Cells(ligneResultat, 8) = groupeUnique("secable")
+        wsCalcul.Cells(ligneResultat, 9) = groupeUnique("samedi")
+        ligneResultat = ligneResultat + 1
         
-        ' Calculer la borne pour les pairs
-        Dim bornePairs As String
-        bornePairs = CalculerBornePourParite(groupe("pairs"), False, tousLesNumerosExistants)
-        
-        ' Combiner les bornes
-        Dim borneCombinee As String
-        If borneImpairs <> "" And bornePairs <> "" Then
-            borneCombinee = borneImpairs & " / " & bornePairs
-        ElseIf borneImpairs <> "" Then
-            borneCombinee = borneImpairs
-        ElseIf bornePairs <> "" Then
-            borneCombinee = bornePairs
-        Else
-            borneCombinee = ""
-        End If
-        
-        ' Écrire la ligne combinée
-        If borneCombinee <> "" Then
-            wsCalcul.Cells(ligneResultat, 1) = commune
-            wsCalcul.Cells(ligneResultat, 2) = motDirecteur
-            wsCalcul.Cells(ligneResultat, 3) = voie
-            wsCalcul.Cells(ligneResultat, 4) = ligne3
-            wsCalcul.Cells(ligneResultat, 5) = borneCombinee
-            wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
-            wsCalcul.Cells(ligneResultat, 7) = groupe("tournee")
-            wsCalcul.Cells(ligneResultat, 8) = groupe("secable")
-            wsCalcul.Cells(ligneResultat, 9) = groupe("samedi")
-            ligneResultat = ligneResultat + 1
-        End If
-    Next cleGroupe
+    Else
+        ' Voie pluri-distribuée : calculer les bornes pour chaque combinaison
+        Dim cleGroupe As Variant
+        For Each cleGroupe In groupes.Keys
+            Dim groupe As Object
+            Set groupe = groupes(cleGroupe)
+            
+            ' Calculer la borne pour les impairs
+            Dim borneImpairs As String
+            borneImpairs = CalculerBornePourParite(groupe("impairs"), True, tousLesNumerosExistants)
+            
+            ' Calculer la borne pour les pairs
+            Dim bornePairs As String
+            bornePairs = CalculerBornePourParite(groupe("pairs"), False, tousLesNumerosExistants)
+            
+            ' Combiner les bornes
+            Dim borneCombinee As String
+            If borneImpairs <> "" And bornePairs <> "" Then
+                borneCombinee = borneImpairs & " / " & bornePairs
+            ElseIf borneImpairs <> "" Then
+                borneCombinee = borneImpairs
+            ElseIf bornePairs <> "" Then
+                borneCombinee = bornePairs
+            Else
+                borneCombinee = ""
+            End If
+            
+            ' Écrire la ligne avec bornes
+            If borneCombinee <> "" Then
+                wsCalcul.Cells(ligneResultat, 1) = commune
+                wsCalcul.Cells(ligneResultat, 2) = motDirecteur
+                wsCalcul.Cells(ligneResultat, 3) = voie
+                wsCalcul.Cells(ligneResultat, 4) = ligne3
+                wsCalcul.Cells(ligneResultat, 5) = borneCombinee
+                wsCalcul.Cells(ligneResultat, 6) = libelleDistrict
+                wsCalcul.Cells(ligneResultat, 7) = groupe("tournee")
+                wsCalcul.Cells(ligneResultat, 8) = groupe("secable")
+                wsCalcul.Cells(ligneResultat, 9) = groupe("samedi")
+                ligneResultat = ligneResultat + 1
+            End If
+        Next cleGroupe
+    End If
 End Sub
 
 Function CalculerBornePourParite(ByRef numerosParite As Object, ByVal estImpair As Boolean, _
