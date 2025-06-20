@@ -272,7 +272,9 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
                 Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
                 Dim j As Long
                 For j = 0 To UBound(arrayNumeros)
-                    numerosDeCetteCombinaison.Add arrayNumeros(j), True
+                    If Not numerosDeCetteCombinaison.Exists(arrayNumeros(j)) Then
+                        numerosDeCetteCombinaison.Add arrayNumeros(j), True
+                    End If
                 Next j
                 
                 ' Parcourir tous les numéros de cette parité entre fin et numeroActuel
