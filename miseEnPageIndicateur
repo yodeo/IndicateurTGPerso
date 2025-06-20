@@ -1,0 +1,280 @@
+Sub MiseEnFormeParCommune()
+    '=========================================================================
+    ' MISE EN FORME DES DONNÉES PAR COMMUNE
+    ' Regroupe les voies par commune et les affiche sur le nombre de colonnes choisi
+    '=========================================================================
+    
+    Dim wsSource As Worksheet
+    Dim wsResultat As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim nbColonnes As Integer
+    Dim ligneActuelle As Long
+    
+    ' 1. VÉRIFICATION DE LA FEUILLE SOURCE
+    '=========================================================================
+    Set wsSource = Nothing
+    On Error Resume Next
+    Set wsSource = ThisWorkbook.Worksheets("Calcul des bornes")
+    On Error GoTo 0
+    
+    If wsSource Is Nothing Then
+        MsgBox "La feuille 'Calcul des bornes' n'existe pas !", vbCritical
+        Exit Sub
+    End If
+    
+    ' Vérifier qu'il y a des données
+    lastRow = wsSource.Cells(wsSource.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then
+        MsgBox "Aucune donnée trouvée dans la feuille 'Calcul des bornes' !", vbCritical
+        Exit Sub
+    End If
+    
+    ' 2. DEMANDER LE NOMBRE DE COLONNES
+    '=========================================================================
+    Do
+        Dim reponse As String
+        reponse = InputBox("Sur combien de colonnes souhaitez-vous afficher les voies ?" & vbCrLf & _
+                          "Entrez un nombre entre 1 et 6 :", "Nombre de colonnes", "1")
+        
+        If reponse = "" Then Exit Sub ' Annulation
+        
+        If IsNumeric(reponse) Then
+            nbColonnes = CInt(reponse)
+            If nbColonnes >= 1 And nbColonnes <= 6 Then
+                Exit Do
+            Else
+                MsgBox "Veuillez entrer un nombre entre 1 et 6.", vbExclamation
+            End If
+        Else
+            MsgBox "Veuillez entrer un nombre valide.", vbExclamation
+        End If
+    Loop
+    
+    ' 3. CRÉATION DE LA FEUILLE RÉSULTAT
+    '=========================================================================
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    ThisWorkbook.Worksheets("Mise en forme par commune").Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsResultat = ThisWorkbook.Worksheets.Add
+    wsResultat.Name = "Mise en forme par commune"
+    
+    ' 4. COLLECTE DES DONNÉES PAR COMMUNE
+    '=========================================================================
+    Dim dicCommunes As Object
+    Set dicCommunes = CreateObject("Scripting.Dictionary")
+    
+    ' Parcourir toutes les lignes de données
+    For i = 2 To lastRow
+        Dim commune As String, voie As String, motDirecteur As String
+        Dim borne As String, tournee As String, secable As String, samedi As String
+        
+        commune = Trim(CStr(wsSource.Cells(i, 1).Value))
+        motDirecteur = Trim(CStr(wsSource.Cells(i, 2).Value))
+        voie = Trim(CStr(wsSource.Cells(i, 3).Value))
+        borne = Trim(CStr(wsSource.Cells(i, 5).Value))
+        tournee = Trim(CStr(wsSource.Cells(i, 7).Value))
+        secable = Trim(CStr(wsSource.Cells(i, 8).Value))
+        samedi = Trim(CStr(wsSource.Cells(i, 9).Value))
+        
+        If commune <> "" And voie <> "" Then
+            ' Créer la clé unique pour la voie
+            Dim cleVoie As String
+            cleVoie = motDirecteur & " " & voie
+            If borne <> "" Then
+                cleVoie = cleVoie & " (" & borne & ")"
+            End If
+            
+            ' Ajouter à la commune
+            If Not dicCommunes.Exists(commune) Then
+                Dim nouvelleCommune As Object
+                Set nouvelleCommune = CreateObject("Scripting.Dictionary")
+                dicCommunes.Add commune, nouvelleCommune
+            End If
+            
+            ' Ajouter la voie avec ses propriétés
+            If Not dicCommunes(commune).Exists(cleVoie) Then
+                Dim proprietes As Object
+                Set proprietes = CreateObject("Scripting.Dictionary")
+                proprietes.Add "tournee", tournee
+                proprietes.Add "secable", secable
+                proprietes.Add "samedi", samedi
+                dicCommunes(commune).Add cleVoie, proprietes
+            End If
+        End If
+    Next i
+    
+    ' 5. AFFICHAGE DES DONNÉES
+    '=========================================================================
+    ligneActuelle = 1
+    
+    ' Créer les en-têtes selon le nombre de colonnes
+    Call CreerEntetes(wsResultat, nbColonnes)
+    ligneActuelle = 3 ' Commencer après les en-têtes
+    
+    ' Parcourir chaque commune
+    Dim cleCommune As Variant
+    For Each cleCommune In dicCommunes.Keys
+        Dim communeActuelle As String
+        communeActuelle = CStr(cleCommune)
+        
+        ' Afficher le nom de la commune (fusionné sur toutes les colonnes)
+        Call AfficherNomCommune(wsResultat, communeActuelle, ligneActuelle, nbColonnes)
+        ligneActuelle = ligneActuelle + 1
+        
+        ' Récupérer toutes les voies de cette commune
+        Dim voiesCommune As Object
+        Set voiesCommune = dicCommunes(cleCommune)
+        
+        ' Convertir en array pour pouvoir les répartir
+        ReDim voiesArray(0 To voiesCommune.Count - 1, 0 To 3) As String
+        Dim indexVoie As Long
+        indexVoie = 0
+        
+        Dim cleVoieCommune As Variant
+        For Each cleVoieCommune In voiesCommune.Keys
+            Dim propVoie As Object
+            Set propVoie = voiesCommune(cleVoieCommune)
+            
+            voiesArray(indexVoie, 0) = CStr(cleVoieCommune)
+            voiesArray(indexVoie, 1) = propVoie("tournee")
+            voiesArray(indexVoie, 2) = propVoie("secable")
+            voiesArray(indexVoie, 3) = propVoie("samedi")
+            indexVoie = indexVoie + 1
+        Next cleVoieCommune
+        
+        ' Afficher les voies réparties sur les colonnes
+        Call AfficherVoiesReparties(wsResultat, voiesArray, voiesCommune.Count, ligneActuelle, nbColonnes)
+        
+        ' Calculer le nombre de lignes utilisées
+        Dim nbLignesVoies As Long
+        nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesCommune.Count / nbColonnes, 1)
+        ligneActuelle = ligneActuelle + nbLignesVoies + 1 ' +1 pour l'espacement
+    Next cleCommune
+    
+    ' 6. MISE EN FORME FINALE
+    '=========================================================================
+    Call AppliquerMiseEnForme(wsResultat, nbColonnes)
+    
+    MsgBox "Mise en forme terminée !" & vbCrLf & _
+           "Communes traitées : " & dicCommunes.Count & vbCrLf & _
+           "Affichage sur " & nbColonnes & " colonne(s)", vbInformation
+End Sub
+
+Sub CreerEntetes(ByRef ws As Worksheet, ByVal nbColonnes As Integer)
+    '=========================================================================
+    ' CRÉATION DES EN-TÊTES
+    '=========================================================================
+    Dim col As Integer
+    
+    For col = 1 To nbColonnes
+        Dim colBase As Integer
+        colBase = (col - 1) * 4 + 1
+        
+        ws.Cells(1, colBase) = "Voie"
+        ws.Cells(1, colBase + 1) = "Tournée"
+        ws.Cells(1, colBase + 2) = "Sécable"
+        ws.Cells(1, colBase + 3) = "Samedi"
+        
+        ' Mise en forme des en-têtes
+        With ws.Range(ws.Cells(1, colBase), ws.Cells(1, colBase + 3))
+            .Font.Bold = True
+            .Interior.Color = RGB(180, 198, 231)
+            .HorizontalAlignment = xlCenter
+        End With
+    Next col
+End Sub
+
+Sub AfficherNomCommune(ByRef ws As Worksheet, ByVal commune As String, ByVal ligne As Long, ByVal nbColonnes As Integer)
+    '=========================================================================
+    ' AFFICHAGE DU NOM DE LA COMMUNE
+    '=========================================================================
+    Dim dernierCol As Integer
+    dernierCol = nbColonnes * 4
+    
+    ' Fusionner les cellules et écrire le nom de la commune
+    With ws.Range(ws.Cells(ligne, 1), ws.Cells(ligne, dernierCol))
+        .Merge
+        .Value = UCase(commune)
+        .Font.Bold = True
+        .Font.Size = 12
+        .Interior.Color = RGB(255, 255, 0) ' Jaune
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
+End Sub
+
+Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, ByVal nbVoies As Long, _
+                          ByRef ligneDebut As Long, ByVal nbColonnes As Integer)
+    '=========================================================================
+    ' AFFICHAGE DES VOIES RÉPARTIES SUR LES COLONNES
+    '=========================================================================
+    Dim voieIndex As Long
+    Dim ligne As Long, col As Integer
+    Dim maxLignes As Long
+    
+    ' Calculer le nombre maximum de lignes nécessaires
+    maxLignes = Application.WorksheetFunction.Ceiling_Precise(nbVoies / nbColonnes, 1)
+    
+    voieIndex = 0
+    
+    For ligne = 0 To maxLignes - 1
+        For col = 1 To nbColonnes
+            If voieIndex < nbVoies Then
+                Dim colBase As Integer
+                colBase = (col - 1) * 4 + 1
+                Dim ligneActuelle As Long
+                ligneActuelle = ligneDebut + ligne
+                
+                ' Écrire les données de la voie
+                ws.Cells(ligneActuelle, colBase) = voiesArray(voieIndex, 0)     ' Voie
+                ws.Cells(ligneActuelle, colBase + 1) = voiesArray(voieIndex, 1) ' Tournée
+                ws.Cells(ligneActuelle, colBase + 2) = voiesArray(voieIndex, 2) ' Sécable
+                ws.Cells(ligneActuelle, colBase + 3) = voiesArray(voieIndex, 3) ' Samedi
+                
+                ' Mise en forme des cellules
+                With ws.Range(ws.Cells(ligneActuelle, colBase), ws.Cells(ligneActuelle, colBase + 3))
+                    .Borders.LineStyle = xlContinuous
+                    .VerticalAlignment = xlCenter
+                End With
+                
+                ' Couleur alternée pour les tournées
+                If voiesArray(voieIndex, 1) <> "" Then
+                    ws.Cells(ligneActuelle, colBase + 1).Interior.Color = RGB(220, 230, 241)
+                End If
+                
+                voieIndex = voieIndex + 1
+            End If
+        Next col
+    Next ligne
+End Sub
+
+Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer)
+    '=========================================================================
+    ' MISE EN FORME FINALE
+    '=========================================================================
+    
+    ' Ajuster la largeur des colonnes
+    Dim col As Integer
+    For col = 1 To nbColonnes
+        Dim colBase As Integer
+        colBase = (col - 1) * 4 + 1
+        
+        ws.Columns(colBase).ColumnWidth = 35      ' Voie
+        ws.Columns(colBase + 1).ColumnWidth = 10  ' Tournée
+        ws.Columns(colBase + 2).ColumnWidth = 10  ' Sécable
+        ws.Columns(colBase + 3).ColumnWidth = 10  ' Samedi
+    Next col
+    
+    ' Figer la première ligne
+    ws.Rows("2:2").Select
+    ActiveWindow.FreezePanes = True
+    
+    ' Sélectionner la cellule A1
+    ws.Range("A1").Select
+End Sub
