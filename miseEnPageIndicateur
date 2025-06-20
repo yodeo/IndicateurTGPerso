@@ -117,13 +117,13 @@ Sub MiseEnFormeParCommune()
     Dim communesTriees As Object
     Set communesTriees = TrierDictionnaire(dicCommunes)
     
-    ' Parcourir chaque commune (triée)
+    ' Parcourir chaque commune triée
     Dim cleCommune As Variant
     For Each cleCommune In communesTriees.Keys
         Dim communeActuelle As String
         communeActuelle = CStr(cleCommune)
         
-        ' Afficher le nom de la commune (fusionné sur toutes les colonnes)
+        ' Afficher le nom de la commune
         Call AfficherNomCommune(wsResultat, communeActuelle, ligneActuelle, nbColonnes)
         ligneActuelle = ligneActuelle + 1
         
@@ -134,7 +134,7 @@ Sub MiseEnFormeParCommune()
         Dim voiesTriees As Object
         Set voiesTriees = TrierDictionnaire(voiesCommune)
         
-        ' Convertir en array pour pouvoir les répartir
+        ' Convertir en array
         ReDim voiesArray(0 To voiesTriees.Count - 1, 0 To 3) As String
         Dim indexVoie As Long
         indexVoie = 0
@@ -151,13 +151,13 @@ Sub MiseEnFormeParCommune()
             indexVoie = indexVoie + 1
         Next cleVoieCommune
         
-        ' Afficher les voies réparties sur les colonnes
+        ' Afficher les voies
         Call AfficherVoiesReparties(wsResultat, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource)
         
         ' Calculer le nombre de lignes utilisées
         Dim nbLignesVoies As Long
         nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
-        ligneActuelle = ligneActuelle + nbLignesVoies + 1 ' +1 pour l'espacement
+        ligneActuelle = ligneActuelle + nbLignesVoies + 1
     Next cleCommuneeActuelle = CStr(cleCommune)
         
         ' Afficher le nom de la commune (fusionné sur toutes les colonnes)
