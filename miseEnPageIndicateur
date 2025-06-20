@@ -171,32 +171,57 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
     Dim voieFormatee As String
     Dim resteVoie As String
     
-    ' Debug - afficher les valeurs reçues
-    Debug.Print "Mot directeur: '" & motDirecteur & "' - Voie: '" & voie & "'"
-    
     ' Nettoyer et normaliser les chaînes
     Dim motDirecteurClean As String
     Dim voieClean As String
-    motDirecteurClean = UCase(Trim(motDirecteur))
-    voieClean = UCase(Trim(voie))
+    motDirecteurClean = UCase(Trim(CStr(motDirecteur)))
+    voieClean = UCase(Trim(CStr(voie)))
     
-    ' Différentes stratégies pour extraire le reste de la voie
-    resteVoie = voie
+    ' Commencer avec la voie complète
+    resteVoie = Trim(CStr(voie))
     
-    ' Stratégie 1: Le mot directeur est au début
+    ' Stratégie 1: Le mot directeur est au début de la voie
     If InStr(1, voieClean, motDirecteurClean) = 1 Then
-        resteVoie = Trim(Mid(voie, Len(motDirecteur) + 1))
-        Debug.Print "Stratégie 1 - Reste après suppression: '" & resteVoie & "'"
-    ' Stratégie 2: Chercher le mot directeur n'importe où dans la voie
-    ElseIf InStr(voieClean, motDirecteurClean) > 0 Then
-        ' Remplacer le mot directeur par rien
-        resteVoie = Replace(voie, motDirecteur, "", 1, 1, vbTextCompare)
-        resteVoie = Trim(resteVoie)
-        Debug.Print "Stratégie 2 - Reste après remplacement: '" & resteVoie & "'"
+        resteVoie = Trim(Mid(resteVoie, Len(motDirecteurClean) + 1))
+        Debug.Print "Suppression au début - Reste: '" & resteVoie & "'"
     End If
     
-    ' Nettoyer les prépositions au début
+    ' Stratégie 2: Le mot directeur est à la fin de la voie (comme "ROUTE DU PIC")
+    If Right(voieClean, Len(motDirecteurClean)) = motDirecteurClean Then
+        ' Vérifier qu'il y a un espace ou préposition avant
+        Dim positionFin As Integer
+        positionFin = Len(voieClean) - Len(motDirecteurClean) + 1
+        If positionFin > 1 Then
+            Dim caracterePrecedent As String
+            caracterePrecedent = Mid(voieClean, positionFin - 1, 1)
+            If caracterePrecedent = " " Then
+                ' Enlever le mot directeur de la fin
+                resteVoie = Trim(Left(resteVoie, Len(resteVoie) - Len(motDirecteurClean)))
+                Debug.Print "Suppression à la fin - Reste: '" & resteVoie & "'"
+            End If
+        End If
+    End If
+    
+    ' Stratégie 3: Le mot directeur est au milieu (avec des prépositions)
+    ' Patterns comme "ROUTE DU PIC", "RUE DES TANINS", etc.
+    Dim patterns As Variant
+    patterns = Array(" DU " & motDirecteurClean, " DE " & motDirecteurClean, " DES " & motDirecteurClean, _
+                    " DE LA " & motDirecteurClean, " DE L'" & motDirecteurClean)
+    
+    Dim i As Integer
+    For i = 0 To UBound(patterns)
+        If InStr(voieClean, patterns(i)) > 0 Then
+            resteVoie = Replace(resteVoie, patterns(i), "", 1, 1, vbTextCompare)
+            resteVoie = Trim(resteVoie)
+            Debug.Print "Suppression pattern '" & patterns(i) & "' - Reste: '" & resteVoie & "'"
+            Exit For
+        End If
+    Next i
+    
+    ' Nettoyer les prépositions orphelines au début ou à la fin
     resteVoie = Trim(resteVoie)
+    
+    ' Enlever prépositions au début
     If Left(UCase(resteVoie), 3) = "DE " Then
         resteVoie = Trim(Mid(resteVoie, 4))
     ElseIf Left(UCase(resteVoie), 3) = "DU " Then
@@ -211,13 +236,22 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
         resteVoie = Trim(Mid(resteVoie, 5))
     End If
     
+    ' Enlever prépositions à la fin
+    If Right(UCase(resteVoie), 3) = " DE" Then
+        resteVoie = Trim(Left(resteVoie, Len(resteVoie) - 3))
+    ElseIf Right(UCase(resteVoie), 3) = " DU" Then
+        resteVoie = Trim(Left(resteVoie, Len(resteVoie) - 3))
+    ElseIf Right(UCase(resteVoie), 4) = " DES" Then
+        resteVoie = Trim(Left(resteVoie, Len(resteVoie) - 4))
+    End If
+    
     Debug.Print "Reste final après nettoyage: '" & resteVoie & "'"
     
     ' Construire le format final
-    If resteVoie <> "" And UCase(resteVoie) <> UCase(motDirecteur) And Len(resteVoie) > 2 Then
-        voieFormatee = UCase(motDirecteur) & " (" & resteVoie & ")"
+    If resteVoie <> "" And UCase(resteVoie) <> motDirecteurClean And Len(resteVoie) > 1 Then
+        voieFormatee = motDirecteurClean & " (" & resteVoie & ")"
     Else
-        voieFormatee = UCase(motDirecteur)
+        voieFormatee = motDirecteurClean
     End If
     
     ' Ajouter les bornes si présentes
