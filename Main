@@ -252,6 +252,16 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
         
         ' Créer des plages continues, coupées seulement si un numéro intermédiaire existe dans une autre combinaison
         If UBound(arrayNumeros) >= 0 Then
+            ' Créer UNE SEULE FOIS le dictionnaire des numéros de CETTE combinaison
+            Dim numerosDeCetteCombinaison As Object
+            Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
+            Dim j As Long
+            For j = 0 To UBound(arrayNumeros)
+                If Not numerosDeCetteCombinaison.Exists(arrayNumeros(j)) Then
+                    numerosDeCetteCombinaison.Add arrayNumeros(j), True
+                End If
+            Next j
+            
             Dim debut As Long, fin As Long
             debut = arrayNumeros(0)
             fin = arrayNumeros(0)
@@ -266,16 +276,6 @@ Sub TraiterParite(ByRef wsCalcul As Worksheet, ByVal commune As String, ByVal vo
                 doitCouper = False
                 Dim numeroOuCouper As Long
                 numeroOuCouper = 0
-                
-                ' Créer un dictionnaire des numéros de CETTE combinaison pour vérification
-                Dim numerosDeCetteCombinaison As Object
-                Set numerosDeCetteCombinaison = CreateObject("Scripting.Dictionary")
-                Dim j As Long
-                For j = 0 To UBound(arrayNumeros)
-                    If Not numerosDeCetteCombinaison.Exists(arrayNumeros(j)) Then
-                        numerosDeCetteCombinaison.Add arrayNumeros(j), True
-                    End If
-                Next j
                 
                 ' Parcourir tous les numéros de cette parité entre fin et numeroActuel
                 Dim numeroIntermediaire As Long
