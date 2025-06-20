@@ -492,9 +492,17 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim aDesNumeros As Boolean
                 aDesNumeros = VoieContientDesNumeros(voieComplete)
                 
-                ' Mise en forme des cellules avec alignement
+                ' Mise en forme des cellules avec alignement et bordures spéciales
                 With ws.Range(ws.Cells(ligneActuelle, colBase), ws.Cells(ligneActuelle, colBase + nbChampsParColonne - 1))
-                    .Borders.LineStyle = xlContinuous
+                    ' Bordures latérales continues
+                    .Borders(xlEdgeLeft).LineStyle = xlContinuous
+                    .Borders(xlEdgeRight).LineStyle = xlContinuous
+                    .Borders(xlInsideVertical).LineStyle = xlContinuous
+                    
+                    ' Bordures supérieure et inférieure en pointillés
+                    .Borders(xlEdgeTop).LineStyle = xlDot
+                    .Borders(xlEdgeBottom).LineStyle = xlDot
+                    
                     .VerticalAlignment = xlCenter
                     
                     ' Fond vert et police blanche si la voie contient des numéros
