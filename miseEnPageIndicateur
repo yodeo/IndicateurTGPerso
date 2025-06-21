@@ -28,7 +28,7 @@ Sub MiseEnFormeParCommune()
     End If
     
     ' Vérifier qu'il y a des données
-    lastRow = wsSource.Cells(wsSource.Rows.Count, 1).End(xlUp).Row
+    lastRow = wsSource.Cells(wsSource.Rows.Count, 1).End(xlUp).row
     If lastRow < 2 Then
         MsgBox "Aucune donnée trouvée dans la feuille 'Calcul des bornes' !", vbCritical
         Exit Sub
@@ -93,13 +93,13 @@ Sub MiseEnFormeParCommune()
         Dim commune As String, voie As String, motDirecteur As String
         Dim borne As String, tournee As String, secable As String, samedi As String
         
-        commune = Trim(CStr(wsSource.Cells(i, 1).Value))
-        motDirecteur = Trim(CStr(wsSource.Cells(i, 2).Value))
-        voie = Trim(CStr(wsSource.Cells(i, 3).Value))
-        borne = Trim(CStr(wsSource.Cells(i, 5).Value))
-        tournee = Trim(CStr(wsSource.Cells(i, 7).Value))
-        secable = Trim(CStr(wsSource.Cells(i, 8).Value))
-        samedi = Trim(CStr(wsSource.Cells(i, 9).Value))
+        commune = Trim(CStr(wsSource.Cells(i, 1).value))
+        motDirecteur = Trim(CStr(wsSource.Cells(i, 2).value))
+        voie = Trim(CStr(wsSource.Cells(i, 3).value))
+        borne = Trim(CStr(wsSource.Cells(i, 5).value))
+        tournee = Trim(CStr(wsSource.Cells(i, 7).value))
+        secable = Trim(CStr(wsSource.Cells(i, 8).value))
+        samedi = Trim(CStr(wsSource.Cells(i, 9).value))
         
         If commune <> "" And voie <> "" Then
             ' Créer la clé formatée pour la voie avec le mot directeur
@@ -139,7 +139,7 @@ Sub MiseEnFormeParCommune()
     
     ' Parcourir chaque commune triée
     Dim cleCommune As Variant
-    For Each cleCommune In communesTriees.Keys
+    For Each cleCommune In communesTriees.keys
         Dim communeActuelle As String
         communeActuelle = CStr(cleCommune)
         
@@ -165,7 +165,7 @@ Sub MiseEnFormeParCommune()
         indexVoie = 0
         
         Dim cleVoieCommune As Variant
-        For Each cleVoieCommune In voiesTriees.Keys
+        For Each cleVoieCommune In voiesTriees.keys
             Dim propVoie As Object
             Set propVoie = voiesTriees(cleVoieCommune)
             
@@ -222,7 +222,7 @@ Function TrierDictionnaire(ByRef dicOriginal As Object) As Object
     
     ' Convertir les clés en array pour les trier
     Dim cles As Variant
-    cles = dicOriginal.Keys
+    cles = dicOriginal.keys
     
     ' Tri à bulles des clés
     Dim i As Long, j As Long
@@ -397,7 +397,7 @@ Sub AfficherNomCommune(ByRef ws As Worksheet, ByVal commune As String, ByVal lig
     ' Fusionner les cellules et écrire le nom de la commune
     With ws.Range(ws.Cells(ligne, 1), ws.Cells(ligne, dernierCol))
         .Merge
-        .Value = UCase(commune)
+        .value = UCase(commune)
         .Font.Bold = True
         .Font.Size = 12
         .Interior.Color = RGB(255, 255, 0) ' Jaune
@@ -456,7 +456,7 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 ' Formater la voie avec indicateur de changement de lettre
                 Dim voieFormatee As String
                 If changementLettre Then
-                    voieFormatee = "■ " & voieComplete ' Carré noir pour le changement
+                    voieFormatee = "¦ " & voieComplete ' Carré noir pour le changement
                 Else
                     voieFormatee = voieComplete
                 End If
@@ -551,7 +551,7 @@ End Sub
 Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
     '=========================================================================
     ' EXTRAIT LE MOT DIRECTEUR D'UNE VOIE FORMATÉE
-    ' Ex: "PIC (ROUTE) 25" → "PIC"
+    ' Ex: "PIC (ROUTE) 25" ? "PIC"
     '=========================================================================
     Dim posParenthese As Integer
     posParenthese = InStr(voieComplete, " (")
@@ -570,7 +570,7 @@ Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
     End If
     
     ' Enlever le carré s'il est présent
-    If Left(ExtraireMotDirecteur, 2) = "■ " Then
+    If Left(ExtraireMotDirecteur, 2) = "¦ " Then
         ExtraireMotDirecteur = Trim(Mid(ExtraireMotDirecteur, 3))
     End If
 End Function
@@ -583,7 +583,7 @@ Sub MettreMotDirecteurEnGras(ByRef cellule As Range, ByVal motDirecteur As Strin
     Dim positionDebut As Integer
     Dim longueurMot As Integer
     
-    texteComplet = cellule.Value
+    texteComplet = cellule.value
     
     ' Chercher la position du mot directeur dans le texte
     positionDebut = InStr(1, texteComplet, motDirecteur, vbTextCompare)
@@ -741,3 +741,4 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
     ' Sélectionner la cellule A1
     ws.Range("A1").Select
 End Sub
+
