@@ -802,7 +802,7 @@ Function TrouverElementDominant(ByRef dictionnaire As Object) As String
         End If
     Next cle
     
-    Set TrouverElementDominant = elementDominant
+    TrouverElementDominant = elementDominant
 End Function
 
 Sub AfficherModeComplet(ByRef ws As Worksheet, ByRef communesTriees As Object, ByRef ligneActuelle As Long, _
