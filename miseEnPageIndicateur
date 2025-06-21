@@ -536,7 +536,7 @@ Sub AfficherCommuneMono(ByRef ws As Worksheet, ByVal commune As String, ByRef in
     With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, nbChampsParColonne))
         .Font.Bold = True
         .Font.Size = 12
-        .Interior.Color = RGB(144, 238, 144) ' Vert clair
+        .Interior.Color = RGB(255, 255, 0) ' Jaune
         .Font.Color = RGB(0, 0, 0) ' Police noire
         .HorizontalAlignment = xlLeft
         .VerticalAlignment = xlCenter
@@ -564,9 +564,9 @@ Sub AfficherCommunePluri(ByRef ws As Worksheet, ByVal commune As String, ByRef v
     If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
     If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
     
-    ' Construire le texte avec "Tout sauf"
+    ' Construire le texte avec "TM001 sauf"
     Dim texteCommune As String
-    texteCommune = UCase(commune) & " - Tout sauf " & infos("tournee_principale")
+    texteCommune = UCase(commune) & " - " & infos("tournee_principale") & " sauf"
     
     ' Afficher l'en-tête de commune
     With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, nbColonnes * nbChampsParColonne))
@@ -574,7 +574,8 @@ Sub AfficherCommunePluri(ByRef ws As Worksheet, ByVal commune As String, ByRef v
         .value = texteCommune
         .Font.Bold = True
         .Font.Size = 12
-        .Interior.Color = RGB(255, 255, 0) ' Jaune
+        .Interior.Color = RGB(0, 123, 255) ' Bleu
+        .Font.Color = RGB(255, 255, 255) ' Police blanche
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
         .Borders.LineStyle = xlContinuous
@@ -641,8 +642,24 @@ Sub AfficherCommuneMulti(ByRef ws As Worksheet, ByVal commune As String, ByRef v
     '=========================================================================
     ' AFFICHAGE D'UNE COMMUNE MULTI-DISTRIBUÉE (COMPLET)
     '=========================================================================
-    ' Afficher le nom de la commune
-    Call AfficherNomCommune(ws, commune, ligneActuelle, nbColonnes, afficherSecable, afficherSamedi)
+    Dim nbChampsParColonne As Integer
+    nbChampsParColonne = 2 ' Voie + Tournée
+    If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
+    If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
+    
+    ' Afficher le nom de la commune avec fond noir
+    With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, nbColonnes * nbChampsParColonne))
+        .Merge
+        .value = UCase(commune)
+        .Font.Bold = True
+        .Font.Size = 12
+        .Interior.Color = RGB(0, 0, 0) ' Noir
+        .Font.Color = RGB(255, 255, 255) ' Police blanche
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
     ligneActuelle = ligneActuelle + 1
     
     ' Trier les voies
