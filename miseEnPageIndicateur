@@ -794,6 +794,12 @@ Function TrouverElementDominant(ByRef dictionnaire As Object) As String
     maxCount = 0
     elementDominant = ""
     
+    ' Vérifier si le dictionnaire n'est pas vide
+    If dictionnaire.Count = 0 Then
+        TrouverElementDominant = ""
+        Exit Function
+    End If
+    
     Dim cle As Variant
     For Each cle In dictionnaire.keys
         If dictionnaire(cle) > maxCount Then
