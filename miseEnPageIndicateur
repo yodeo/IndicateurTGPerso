@@ -413,11 +413,11 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                           ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
     '=========================================================================
     ' AFFICHAGE DES VOIES RÉPARTIES SUR LES COLONNES
-    ' Avec adaptation selon les options d'affichage
+    ' Remplissage de haut en bas, puis de gauche à droite
     '=========================================================================
     Dim voieIndex As Long
     Dim ligne As Long, col As Integer
-    Dim maxLignes As Long
+    Dim maxLignesParColonne As Long
     Dim lettreActuelle As String
     Dim lettrePrecedente As String
     Dim nbChampsParColonne As Integer
@@ -429,13 +429,14 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
     
     lettrePrecedente = ""
     
-    ' Calculer le nombre maximum de lignes nécessaires
-    maxLignes = Application.WorksheetFunction.Ceiling_Precise(nbVoies / nbColonnes, 1)
+    ' Calculer le nombre maximum de lignes par colonne
+    maxLignesParColonne = Application.WorksheetFunction.Ceiling_Precise(nbVoies / nbColonnes, 1)
     
     voieIndex = 0
     
-    For ligne = 0 To maxLignes - 1
-        For col = 1 To nbColonnes
+    ' Remplir colonne par colonne, de haut en bas
+    For col = 1 To nbColonnes
+        For ligne = 0 To maxLignesParColonne - 1
             If voieIndex < nbVoies Then
                 Dim colBase As Integer
                 colBase = (col - 1) * nbChampsParColonne + 1
@@ -566,8 +567,8 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 lettrePrecedente = lettreActuelle
                 voieIndex = voieIndex + 1
             End If
-        Next col
-    Next ligne
+        Next ligne
+    Next col
 End Sub
 
 Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
