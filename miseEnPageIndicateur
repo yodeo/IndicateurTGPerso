@@ -1,4 +1,77 @@
-Sub MiseEnFormeParCommune()
+Sub CreerEntetes(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean, ByVal modeAffichage As String)
+    '=========================================================================
+    ' CRÉATION DES EN-TÊTES SELON LES OPTIONS ET LE MODE
+    '=========================================================================
+    
+    If modeAffichage = "compact" Then
+        ' En-têtes pour le mode compact
+        ws.Cells(1, 1) = "Commune"
+        ws.Cells(1, 2) = "Classification"
+        
+        Dim colIndex As Integer
+        colIndex = 3
+        
+        If afficherSecable Then
+            ws.Cells(1, colIndex) = "Sécable Principal"
+            colIndex = colIndex + 1
+        End If
+        
+        If afficherSamedi Then
+            ws.Cells(1, colIndex) = "Samedi Principal"
+        End If
+        
+        ' Calculer le nombre total de colonnes pour le mode compact
+        Dim nbColCompact As Integer
+        nbColCompact = 2
+        If afficherSecable Then nbColCompact = nbColCompact + 1
+        If afficherSamedi Then nbColCompact = nbColCompact + 1
+        
+        ' Mise en forme des en-têtes compact
+        With ws.Range(ws.Cells(1, 1), ws.Cells(1, nbColCompact))
+            .Font.Bold = True
+            .Interior.Color = RGB(180, 198, 231)
+            .HorizontalAlignment = xlCenter
+        End With
+        
+    Else
+        ' En-têtes pour le mode complet (code original)
+        Dim col As Integer
+        Dim nbChampsParColonne As Integer
+        
+        ' Calculer le nombre de champs par colonne
+        nbChampsParColonne = 2 ' Voie + Tournée toujours présents
+        If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
+        If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
+        
+        For col = 1 To nbColonnes
+            Dim colBase As Integer
+            colBase = (col - 1) * nbChampsParColonne + 1
+            
+            colIndex = colBase
+            
+            ws.Cells(1, colIndex) = "Voie"
+            colIndex = colIndex + 1
+            ws.Cells(1, colIndex) = "Tournée"
+            colIndex = colIndex + 1
+            
+            If afficherSecable Then
+                ws.Cells(1, colIndex) = "Sécable"
+                colIndex = colIndex + 1
+            End If
+            
+            If afficherSamedi Then
+                ws.Cells(1, colIndex) = "Samedi"
+            End If
+            
+            ' Mise en forme des en-têtes
+            With ws.Range(ws.Cells(1, colBase), ws.Cells(1, colBase + nbChampsParColonne - 1))
+                .Font.Bold = True
+                .Interior.Color = RGB(180, 198, 231)
+                .HorizontalAlignment = xlCenter
+            End With
+        Next col
+    End If
+End SubSub MiseEnFormeParCommune()
     '=========================================================================
     ' MISE EN FORME DES DONNÉES PAR COMMUNE
     ' Regroupe les voies par commune et les affiche sur le nombre de colonnes choisi
@@ -14,6 +87,7 @@ Sub MiseEnFormeParCommune()
     Dim afficherSecable As Boolean
     Dim afficherSamedi As Boolean
     Dim nbChampsSupp As Integer
+    Dim modeAffichage As String ' "complet" ou "compact"
     
     ' 1. VÉRIFICATION DE LA FEUILLE SOURCE
     '=========================================================================
@@ -36,6 +110,19 @@ Sub MiseEnFormeParCommune()
     
     ' 2. DEMANDER LES OPTIONS D'AFFICHAGE
     '=========================================================================
+    ' Demander le mode d'affichage
+    Dim reponseModeAffichage As VbMsgBoxResult
+    reponseModeAffichage = MsgBox("Quel mode d'affichage souhaitez-vous ?" & vbCrLf & _
+                                 "OUI = Mode COMPLET (toutes les voies détaillées)" & vbCrLf & _
+                                 "NON = Mode COMPACT (classification des communes)", _
+                                 vbYesNo + vbQuestion, "Mode d'affichage")
+    
+    If reponseModeAffichage = vbYes Then
+        modeAffichage = "complet"
+    Else
+        modeAffichage = "compact"
+    End If
+    
     ' Demander si on affiche le champ Sécable
     Dim reponseSecable As VbMsgBoxResult
     reponseSecable = MsgBox("Voulez-vous afficher la colonne 'Sécable' ?", vbYesNo + vbQuestion, "Affichage Sécable")
@@ -51,26 +138,30 @@ Sub MiseEnFormeParCommune()
     If afficherSecable Then nbChampsSupp = nbChampsSupp + 1
     If afficherSamedi Then nbChampsSupp = nbChampsSupp + 1
     
-    ' 3. DEMANDER LE NOMBRE DE COLONNES
+    ' 3. DEMANDER LE NOMBRE DE COLONNES (seulement en mode complet)
     '=========================================================================
-    Do
-        Dim reponse As String
-        reponse = InputBox("Sur combien de colonnes souhaitez-vous afficher les voies ?" & vbCrLf & _
-                          "Entrez un nombre entre 1 et 6 :", "Nombre de colonnes", "1")
-        
-        If reponse = "" Then Exit Sub ' Annulation
-        
-        If IsNumeric(reponse) Then
-            nbColonnes = CInt(reponse)
-            If nbColonnes >= 1 And nbColonnes <= 6 Then
-                Exit Do
+    If modeAffichage = "complet" Then
+        Do
+            Dim reponse As String
+            reponse = InputBox("Sur combien de colonnes souhaitez-vous afficher les voies ?" & vbCrLf & _
+                              "Entrez un nombre entre 1 et 6 :", "Nombre de colonnes", "1")
+            
+            If reponse = "" Then Exit Sub ' Annulation
+            
+            If IsNumeric(reponse) Then
+                nbColonnes = CInt(reponse)
+                If nbColonnes >= 1 And nbColonnes <= 6 Then
+                    Exit Do
+                Else
+                    MsgBox "Veuillez entrer un nombre entre 1 et 6.", vbExclamation
+                End If
             Else
-                MsgBox "Veuillez entrer un nombre entre 1 et 6.", vbExclamation
+                MsgBox "Veuillez entrer un nombre valide.", vbExclamation
             End If
-        Else
-            MsgBox "Veuillez entrer un nombre valide.", vbExclamation
-        End If
-    Loop
+        Loop
+    Else
+        nbColonnes = 1 ' Mode compact : une seule colonne
+    End If
     
     ' 4. CRÉATION DE LA FEUILLE RÉSULTAT
     '=========================================================================
@@ -130,86 +221,40 @@ Sub MiseEnFormeParCommune()
     ligneActuelle = 1
     
     ' Créer les en-têtes selon le nombre de colonnes et les options
-    Call CreerEntetes(wsResultat, nbColonnes, afficherSecable, afficherSamedi)
+    Call CreerEntetes(wsResultat, nbColonnes, afficherSecable, afficherSamedi, modeAffichage)
     ligneActuelle = 3 ' Commencer après les en-têtes
     
     ' Trier les communes alphabétiquement
     Dim communesTriees As Object
     Set communesTriees = TrierDictionnaire(dicCommunes)
     
-    ' Parcourir chaque commune triée
-    Dim cleCommune As Variant
-    For Each cleCommune In communesTriees.keys
-        Dim communeActuelle As String
-        communeActuelle = CStr(cleCommune)
-        
-        ' Afficher le nom de la commune
-        Call AfficherNomCommune(wsResultat, communeActuelle, ligneActuelle, nbColonnes, afficherSecable, afficherSamedi)
-        ligneActuelle = ligneActuelle + 1
-        
-        ' Récupérer et trier les voies de cette commune
-        Dim voiesCommune As Object
-        Set voiesCommune = dicCommunes(cleCommune)
-        
-        Dim voiesTriees As Object
-        Set voiesTriees = TrierDictionnaire(voiesCommune)
-        
-        ' Convertir en array (taille adaptée selon les options)
-        Dim tailleArray As Integer
-        tailleArray = 3 ' Voie + Tournée toujours présents
-        If afficherSecable Then tailleArray = tailleArray + 1
-        If afficherSamedi Then tailleArray = tailleArray + 1
-        
-        ReDim voiesArray(0 To voiesTriees.Count - 1, 0 To tailleArray - 1) As String
-        Dim indexVoie As Long
-        indexVoie = 0
-        
-        Dim cleVoieCommune As Variant
-        For Each cleVoieCommune In voiesTriees.keys
-            Dim propVoie As Object
-            Set propVoie = voiesTriees(cleVoieCommune)
-            
-            Dim colIndex As Integer
-            colIndex = 0
-            
-            voiesArray(indexVoie, colIndex) = CStr(cleVoieCommune) ' Voie
-            colIndex = colIndex + 1
-            voiesArray(indexVoie, colIndex) = propVoie("tournee") ' Tournée
-            colIndex = colIndex + 1
-            
-            If afficherSecable Then
-                voiesArray(indexVoie, colIndex) = propVoie("secable") ' Sécable
-                colIndex = colIndex + 1
-            End If
-            
-            If afficherSamedi Then
-                voiesArray(indexVoie, colIndex) = propVoie("samedi") ' Samedi
-            End If
-            
-            indexVoie = indexVoie + 1
-        Next cleVoieCommune
-        
-        ' Afficher les voies
-        Call AfficherVoiesReparties(wsResultat, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
-        
-        ' Calculer le nombre de lignes utilisées (sans ligne vide entre communes)
-        Dim nbLignesVoies As Long
-        nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
-        ligneActuelle = ligneActuelle + nbLignesVoies
-    Next cleCommune
+    If modeAffichage = "compact" Then
+        ' Mode compact : affichage optimisé selon la distribution
+        Call AfficherModeCompact(wsResultat, communesTriees, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+    Else
+        ' Mode complet : affichage détaillé des voies
+        Call AfficherModeComplet(wsResultat, communesTriees, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+    End If
     
     ' 7. MISE EN FORME FINALE
     '=========================================================================
-    Call AppliquerMiseEnForme(wsResultat, nbColonnes, afficherSecable, afficherSamedi)
+    Call AppliquerMiseEnForme(wsResultat, nbColonnes, afficherSecable, afficherSamedi, modeAffichage)
     
     Dim champsAffiches As String
-    champsAffiches = "Voie, Tournée"
-    If afficherSecable Then champsAffiches = champsAffiches & ", Sécable"
-    If afficherSamedi Then champsAffiches = champsAffiches & ", Samedi"
+    If modeAffichage = "compact" Then
+        champsAffiches = "Commune, Classification"
+        If afficherSecable Then champsAffiches = champsAffiches & ", Sécable"
+        If afficherSamedi Then champsAffiches = champsAffiches & ", Samedi"
+    Else
+        champsAffiches = "Voie, Tournée"
+        If afficherSecable Then champsAffiches = champsAffiches & ", Sécable"
+        If afficherSamedi Then champsAffiches = champsAffiches & ", Samedi"
+    End If
     
     MsgBox "Mise en forme terminée !" & vbCrLf & _
+           "Mode d'affichage : " & UCase(modeAffichage) & vbCrLf & _
            "Communes traitées : " & communesTriees.Count & vbCrLf & _
-           "Affichage sur " & nbColonnes & " colonne(s)" & vbCrLf & _
+           IIf(modeAffichage = "complet", "Affichage sur " & nbColonnes & " colonne(s)" & vbCrLf, "") & _
            "Champs affichés : " & champsAffiches, vbInformation
 End Sub
 
@@ -340,7 +385,536 @@ Function FormatVoieAvecMotDirecteur(ByVal motDirecteur As String, ByVal voie As 
     FormatVoieAvecMotDirecteur = voieFormatee
 End Function
 
-Sub CreerEntetes(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+Function ClassifierCommune(ByRef voiesCommune As Object) As String
+    '=========================================================================
+    ' CLASSIFIE UNE COMMUNE SELON SA DISTRIBUTION
+    ' Retourne : "MONO", "PLURI" ou "MULTI"
+    '=========================================================================
+    Dim dictTournees As Object
+    Dim dictSecables As Object
+    Dim dictSamedis As Object
+    
+    Set dictTournees = CreateObject("Scripting.Dictionary")
+    Set dictSecables = CreateObject("Scripting.Dictionary")
+    Set dictSamedis = CreateObject("Scripting.Dictionary")
+    
+    Dim totalVoies As Integer
+    totalVoies = voiesCommune.Count
+    
+    ' Compter les occurrences de chaque tournée, sécable et samedi
+    Dim cleVoie As Variant
+    For Each cleVoie In voiesCommune.keys
+        Dim propVoie As Object
+        Set propVoie = voiesCommune(cleVoie)
+        
+        Dim tournee As String, secable As String, samedi As String
+        tournee = propVoie("tournee")
+        secable = propVoie("secable")
+        samedi = propVoie("samedi")
+        
+        ' Compter les tournées
+        If dictTournees.Exists(tournee) Then
+            dictTournees(tournee) = dictTournees(tournee) + 1
+        Else
+            dictTournees.Add tournee, 1
+        End If
+        
+        ' Compter les sécables
+        If dictSecables.Exists(secable) Then
+            dictSecables(secable) = dictSecables(secable) + 1
+        Else
+            dictSecables.Add secable, 1
+        End If
+        
+        ' Compter les samedis
+        If dictSamedis.Exists(samedi) Then
+            dictSamedis(samedi) = dictSamedis(samedi) + 1
+        Else
+            dictSamedis.Add samedi, 1
+        End If
+    Next cleVoie
+    
+    ' Analyser la distribution des tournées (critère principal)
+    Dim maxTournees As Integer
+    Dim cleTournee As Variant
+    maxTournees = 0
+    
+    For Each cleTournee In dictTournees.keys
+        If dictTournees(cleTournee) > maxTournees Then
+            maxTournees = dictTournees(cleTournee)
+        End If
+    Next cleTournee
+    
+    Dim pourcentagePrincipal As Double
+    pourcentagePrincipal = (maxTournees / totalVoies) * 100
+    
+    ' Classification selon le pourcentage de la tournée principale
+    If pourcentagePrincipal = 100 Then
+        ' Vérifier aussi que sécable et samedi sont homogènes
+        If dictSecables.Count = 1 And dictSamedis.Count = 1 Then
+            ClassifierCommune = "MONO"
+        Else
+            ClassifierCommune = "PLURI"
+        End If
+    ElseIf pourcentagePrincipal >= 75 Then
+        ClassifierCommune = "PLURI"
+    Else
+        ClassifierCommune = "MULTI"
+    End If
+End Function
+
+Sub AfficherModeCompact(ByRef ws As Worksheet, ByRef communesTriees As Object, ByRef ligneActuelle As Long, _
+                       ByVal nbColonnes As Integer, ByRef wsSource As Worksheet, _
+                       ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+    '=========================================================================
+    ' AFFICHAGE EN MODE COMPACT - OPTIMISATION SELON LA DISTRIBUTION
+    '=========================================================================
+    Dim cleCommune As Variant
+    
+    For Each cleCommune In communesTriees.keys
+        Dim communeActuelle As String
+        communeActuelle = CStr(cleCommune)
+        
+        ' Récupérer les voies de cette commune
+        Dim voiesCommune As Object
+        Set voiesCommune = communesTriees(cleCommune)
+        
+        ' Classifier la commune et obtenir les infos
+        Dim classification As String
+        classification = ClassifierCommune(voiesCommune)
+        
+        Dim infosDistribution As Object
+        Set infosDistribution = ObtenirInfosDistribution(voiesCommune)
+        
+        Select Case classification
+            Case "MONO"
+                ' Afficher uniquement le nom avec la tournée entre parenthèses
+                Call AfficherCommuneMono(ws, communeActuelle, infosDistribution, ligneActuelle, afficherSecable, afficherSamedi)
+                ligneActuelle = ligneActuelle + 1
+                
+            Case "PLURI"
+                ' Afficher le nom avec "Tout sauf" + les voies exceptions
+                Call AfficherCommunePluri(ws, communeActuelle, voiesCommune, infosDistribution, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+                
+            Case "MULTI"
+                ' Afficher toutes les voies comme en mode complet
+                Call AfficherCommuneMulti(ws, communeActuelle, voiesCommune, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+        End Select
+    Next cleCommune
+End Sub
+
+Sub AfficherCommuneMono(ByRef ws As Worksheet, ByVal commune As String, ByRef infos As Object, _
+                       ByRef ligneActuelle As Long, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+    '=========================================================================
+    ' AFFICHAGE D'UNE COMMUNE MONO-DISTRIBUÉE
+    '=========================================================================
+    Dim nbChampsParColonne As Integer
+    nbChampsParColonne = 2 ' Voie + Tournée
+    If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
+    If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
+    
+    ' Construire le texte avec tournée entre parenthèses
+    Dim texteCommune As String
+    texteCommune = UCase(commune) & " (" & infos("tournee_principale") & ")"
+    
+    ' Afficher dans la colonne Voie
+    ws.Cells(ligneActuelle, 1) = texteCommune
+    
+    ' Laisser les autres colonnes vides mais formater
+    Dim colIndex As Integer
+    colIndex = 2
+    
+    ws.Cells(ligneActuelle, colIndex) = "" ' Tournée (vide car dans le nom)
+    colIndex = colIndex + 1
+    
+    If afficherSecable Then
+        ws.Cells(ligneActuelle, colIndex) = infos("secable_principal")
+        colIndex = colIndex + 1
+    End If
+    
+    If afficherSamedi Then
+        ws.Cells(ligneActuelle, colIndex) = infos("samedi_principal")
+    End If
+    
+    ' Mise en forme spéciale pour commune mono
+    With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, nbChampsParColonne))
+        .Font.Bold = True
+        .Font.Size = 12
+        .Interior.Color = RGB(144, 238, 144) ' Vert clair
+        .Font.Color = RGB(0, 0, 0) ' Police noire
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
+    
+    ' Centrer les colonnes sécable/samedi
+    If afficherSecable Then
+        ws.Cells(ligneActuelle, nbChampsParColonne - IIf(afficherSamedi, 1, 0)).HorizontalAlignment = xlCenter
+    End If
+    If afficherSamedi Then
+        ws.Cells(ligneActuelle, nbChampsParColonne).HorizontalAlignment = xlCenter
+    End If
+End Sub
+
+Sub AfficherCommunePluri(ByRef ws As Worksheet, ByVal commune As String, ByRef voiesCommune As Object, _
+                        ByRef infos As Object, ByRef ligneActuelle As Long, ByVal nbColonnes As Integer, _
+                        ByRef wsSource As Worksheet, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+    '=========================================================================
+    ' AFFICHAGE D'UNE COMMUNE PLURI-DISTRIBUÉE
+    '=========================================================================
+    Dim nbChampsParColonne As Integer
+    nbChampsParColonne = 2 ' Voie + Tournée
+    If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
+    If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
+    
+    ' Construire le texte avec "Tout sauf"
+    Dim texteCommune As String
+    texteCommune = UCase(commune) & " - Tout sauf " & infos("tournee_principale")
+    
+    ' Afficher l'en-tête de commune
+    With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, nbColonnes * nbChampsParColonne))
+        .Merge
+        .value = texteCommune
+        .Font.Bold = True
+        .Font.Size = 12
+        .Interior.Color = RGB(255, 255, 0) ' Jaune
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
+    ligneActuelle = ligneActuelle + 1
+    
+    ' Filtrer et afficher seulement les voies exceptions
+    Dim voiesExceptions As Object
+    Set voiesExceptions = FiltrerVoiesExceptions(voiesCommune, infos)
+    
+    If voiesExceptions.Count > 0 Then
+        ' Convertir en array et afficher
+        Dim voiesTriees As Object
+        Set voiesTriees = TrierDictionnaire(voiesExceptions)
+        
+        Dim tailleArray As Integer
+        tailleArray = 3 ' Voie + Tournée toujours présents
+        If afficherSecable Then tailleArray = tailleArray + 1
+        If afficherSamedi Then tailleArray = tailleArray + 1
+        
+        ReDim voiesArray(0 To voiesTriees.Count - 1, 0 To tailleArray - 1) As String
+        Dim indexVoie As Long
+        indexVoie = 0
+        
+        Dim cleVoieCommune As Variant
+        For Each cleVoieCommune In voiesTriees.keys
+            Dim propVoie As Object
+            Set propVoie = voiesTriees(cleVoieCommune)
+            
+            Dim colIndex As Integer
+            colIndex = 0
+            
+            voiesArray(indexVoie, colIndex) = CStr(cleVoieCommune) ' Voie
+            colIndex = colIndex + 1
+            voiesArray(indexVoie, colIndex) = propVoie("tournee") ' Tournée
+            colIndex = colIndex + 1
+            
+            If afficherSecable Then
+                voiesArray(indexVoie, colIndex) = propVoie("secable") ' Sécable
+                colIndex = colIndex + 1
+            End If
+            
+            If afficherSamedi Then
+                voiesArray(indexVoie, colIndex) = propVoie("samedi") ' Samedi
+            End If
+            
+            indexVoie = indexVoie + 1
+        Next cleVoieCommune
+        
+        ' Afficher les voies exceptions
+        Call AfficherVoiesReparties(ws, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+        
+        ' Calculer le nombre de lignes utilisées
+        Dim nbLignesVoies As Long
+        nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
+        ligneActuelle = ligneActuelle + nbLignesVoies
+    End If
+End Sub
+
+Sub AfficherCommuneMulti(ByRef ws As Worksheet, ByVal commune As String, ByRef voiesCommune As Object, _
+                        ByRef ligneActuelle As Long, ByVal nbColonnes As Integer, ByRef wsSource As Worksheet, _
+                        ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+    '=========================================================================
+    ' AFFICHAGE D'UNE COMMUNE MULTI-DISTRIBUÉE (COMPLET)
+    '=========================================================================
+    ' Afficher le nom de la commune
+    Call AfficherNomCommune(ws, commune, ligneActuelle, nbColonnes, afficherSecable, afficherSamedi)
+    ligneActuelle = ligneActuelle + 1
+    
+    ' Trier les voies
+    Dim voiesTriees As Object
+    Set voiesTriees = TrierDictionnaire(voiesCommune)
+    
+    ' Convertir en array (taille adaptée selon les options)
+    Dim tailleArray As Integer
+    tailleArray = 3 ' Voie + Tournée toujours présents
+    If afficherSecable Then tailleArray = tailleArray + 1
+    If afficherSamedi Then tailleArray = tailleArray + 1
+    
+    ReDim voiesArray(0 To voiesTriees.Count - 1, 0 To tailleArray - 1) As String
+    Dim indexVoie As Long
+    indexVoie = 0
+    
+    Dim cleVoieCommune As Variant
+    For Each cleVoieCommune In voiesTriees.keys
+        Dim propVoie As Object
+        Set propVoie = voiesTriees(cleVoieCommune)
+        
+        Dim colIndex As Integer
+        colIndex = 0
+        
+        voiesArray(indexVoie, colIndex) = CStr(cleVoieCommune) ' Voie
+        colIndex = colIndex + 1
+        voiesArray(indexVoie, colIndex) = propVoie("tournee") ' Tournée
+        colIndex = colIndex + 1
+        
+        If afficherSecable Then
+            voiesArray(indexVoie, colIndex) = propVoie("secable") ' Sécable
+            colIndex = colIndex + 1
+        End If
+        
+        If afficherSamedi Then
+            voiesArray(indexVoie, colIndex) = propVoie("samedi") ' Samedi
+        End If
+        
+        indexVoie = indexVoie + 1
+    Next cleVoieCommune
+    
+    ' Afficher les voies
+    Call AfficherVoiesReparties(ws, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+    
+    ' Calculer le nombre de lignes utilisées
+    Dim nbLignesVoies As Long
+    nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
+    ligneActuelle = ligneActuelle + nbLignesVoies
+End Sub
+
+Function FiltrerVoiesExceptions(ByRef voiesCommune As Object, ByRef infos As Object) As Object
+    '=========================================================================
+    ' FILTRE LES VOIES QUI NE CORRESPONDENT PAS AUX VALEURS PRINCIPALES
+    '=========================================================================
+    Dim voiesExceptions As Object
+    Set voiesExceptions = CreateObject("Scripting.Dictionary")
+    
+    Dim tournee_principale As String, secable_principal As String, samedi_principal As String
+    tournee_principale = infos("tournee_principale")
+    secable_principal = infos("secable_principal")
+    samedi_principal = infos("samedi_principal")
+    
+    Dim cleVoie As Variant
+    For Each cleVoie In voiesCommune.keys
+        Dim propVoie As Object
+        Set propVoie = voiesCommune(cleVoie)
+        
+        ' Vérifier si la voie est différente des valeurs principales
+        Dim estException As Boolean
+        estException = False
+        
+        If propVoie("tournee") <> tournee_principale Then estException = True
+        If propVoie("secable") <> secable_principal Then estException = True
+        If propVoie("samedi") <> samedi_principal Then estException = True
+        
+        ' Ajouter aux exceptions si différente
+        If estException Then
+            voiesExceptions.Add cleVoie, propVoie
+        End If
+    Next cleVoie
+    
+    Set FiltrerVoiesExceptions = voiesExceptions
+End Function
+
+Function ObtenirInfosDistribution(ByRef voiesCommune As Object) As Object
+    '=========================================================================
+    ' OBTIENT LES INFORMATIONS DE DISTRIBUTION DOMINANTES D'UNE COMMUNE
+    '=========================================================================
+    Dim dictTournees As Object
+    Dim dictSecables As Object
+    Dim dictSamedis As Object
+    
+    Set dictTournees = CreateObject("Scripting.Dictionary")
+    Set dictSecables = CreateObject("Scripting.Dictionary")
+    Set dictSamedis = CreateObject("Scripting.Dictionary")
+    
+    ' Compter les occurrences
+    Dim cleVoie As Variant
+    For Each cleVoie In voiesCommune.keys
+        Dim propVoie As Object
+        Set propVoie = voiesCommune(cleVoie)
+        
+        Dim tournee As String, secable As String, samedi As String
+        tournee = propVoie("tournee")
+        secable = propVoie("secable")
+        samedi = propVoie("samedi")
+        
+        If dictTournees.Exists(tournee) Then
+            dictTournees(tournee) = dictTournees(tournee) + 1
+        Else
+            dictTournees.Add tournee, 1
+        End If
+        
+        If dictSecables.Exists(secable) Then
+            dictSecables(secable) = dictSecables(secable) + 1
+        Else
+            dictSecables.Add secable, 1
+        End If
+        
+        If dictSamedis.Exists(samedi) Then
+            dictSamedis(samedi) = dictSamedis(samedi) + 1
+        Else
+            dictSamedis.Add samedi, 1
+        End If
+    Next cleVoie
+    
+    ' Trouver les éléments dominants
+    Dim infos As Object
+    Set infos = CreateObject("Scripting.Dictionary")
+    
+    infos.Add "tournee_principale", TrouverElementDominant(dictTournees)
+    infos.Add "secable_principal", TrouverElementDominant(dictSecables)
+    infos.Add "samedi_principal", TrouverElementDominant(dictSamedis)
+    
+    Set ObtenirInfosDistribution = infos
+End Function
+
+Function TrouverElementDominant(ByRef dictionnaire As Object) As String
+    '=========================================================================
+    ' TROUVE L'ÉLÉMENT LE PLUS FRÉQUENT DANS UN DICTIONNAIRE
+    '=========================================================================
+    Dim maxCount As Integer
+    Dim elementDominant As String
+    
+    maxCount = 0
+    elementDominant = ""
+    
+    Dim cle As Variant
+    For Each cle In dictionnaire.keys
+        If dictionnaire(cle) > maxCount Then
+            maxCount = dictionnaire(cle)
+            elementDominant = CStr(cle)
+        End If
+    Next cle
+    
+    TrouverElementDominant = elementDominant
+End Function
+
+Sub FormaterLigneClassification(ByRef ws As Worksheet, ByVal ligne As Long, ByVal classification As String, _
+                               ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+    '=========================================================================
+    ' FORMATE UNE LIGNE SELON SA CLASSIFICATION
+    '=========================================================================
+    Dim nbColonnes As Integer
+    nbColonnes = 2 ' Commune + Classification
+    If afficherSecable Then nbColonnes = nbColonnes + 1
+    If afficherSamedi Then nbColonnes = nbColonnes + 1
+    
+    With ws.Range(ws.Cells(ligne, 1), ws.Cells(ligne, nbColonnes))
+        .Borders.LineStyle = xlContinuous
+        .VerticalAlignment = xlCenter
+        
+        Select Case classification
+            Case "MONO"
+                .Interior.Color = RGB(144, 238, 144) ' Vert clair
+                .Font.Color = RGB(0, 0, 0) ' Noir
+            Case "PLURI"
+                .Interior.Color = RGB(255, 255, 0) ' Jaune
+                .Font.Color = RGB(0, 0, 0) ' Noir
+            Case "MULTI"
+                .Interior.Color = RGB(255, 182, 193) ' Rose clair
+                .Font.Color = RGB(0, 0, 0) ' Noir
+        End Select
+    End With
+    
+    ' Mise en forme spécifique des colonnes
+    ws.Cells(ligne, 1).Font.Bold = True ' Nom de commune en gras
+    ws.Cells(ligne, 2).HorizontalAlignment = xlCenter ' Classification centrée
+    
+    Dim colIndex As Integer
+    colIndex = 3
+    If afficherSecable Then
+        ws.Cells(ligne, colIndex).HorizontalAlignment = xlCenter
+        colIndex = colIndex + 1
+    End If
+    If afficherSamedi Then
+        ws.Cells(ligne, colIndex).HorizontalAlignment = xlCenter
+    End If
+End Sub
+
+Sub AfficherModeComplet(ByRef ws As Worksheet, ByRef communesTriees As Object, ByRef ligneActuelle As Long, _
+                       ByVal nbColonnes As Integer, ByRef wsSource As Worksheet, _
+                       ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+    '=========================================================================
+    ' AFFICHAGE EN MODE COMPLET - DÉTAIL DES VOIES (CODE ORIGINAL)
+    '=========================================================================
+    Dim cleCommune As Variant
+    For Each cleCommune In communesTriees.keys
+        Dim communeActuelle As String
+        communeActuelle = CStr(cleCommune)
+        
+        ' Afficher le nom de la commune
+        Call AfficherNomCommune(ws, communeActuelle, ligneActuelle, nbColonnes, afficherSecable, afficherSamedi)
+        ligneActuelle = ligneActuelle + 1
+        
+        ' Récupérer et trier les voies de cette commune
+        Dim voiesCommune As Object
+        Set voiesCommune = communesTriees(cleCommune)
+        
+        Dim voiesTriees As Object
+        Set voiesTriees = TrierDictionnaire(voiesCommune)
+        
+        ' Convertir en array (taille adaptée selon les options)
+        Dim tailleArray As Integer
+        tailleArray = 3 ' Voie + Tournée toujours présents
+        If afficherSecable Then tailleArray = tailleArray + 1
+        If afficherSamedi Then tailleArray = tailleArray + 1
+        
+        ReDim voiesArray(0 To voiesTriees.Count - 1, 0 To tailleArray - 1) As String
+        Dim indexVoie As Long
+        indexVoie = 0
+        
+        Dim cleVoieCommune As Variant
+        For Each cleVoieCommune In voiesTriees.keys
+            Dim propVoie As Object
+            Set propVoie = voiesTriees(cleVoieCommune)
+            
+            Dim colIndex As Integer
+            colIndex = 0
+            
+            voiesArray(indexVoie, colIndex) = CStr(cleVoieCommune) ' Voie
+            colIndex = colIndex + 1
+            voiesArray(indexVoie, colIndex) = propVoie("tournee") ' Tournée
+            colIndex = colIndex + 1
+            
+            If afficherSecable Then
+                voiesArray(indexVoie, colIndex) = propVoie("secable") ' Sécable
+                colIndex = colIndex + 1
+            End If
+            
+            If afficherSamedi Then
+                voiesArray(indexVoie, colIndex) = propVoie("samedi") ' Samedi
+            End If
+            
+            indexVoie = indexVoie + 1
+        Next cleVoieCommune
+        
+        ' Afficher les voies
+        Call AfficherVoiesReparties(ws, voiesArray, voiesTriees.Count, ligneActuelle, nbColonnes, wsSource, afficherSecable, afficherSamedi)
+        
+        ' Calculer le nombre de lignes utilisées (sans ligne vide entre communes)
+        Dim nbLignesVoies As Long
+        nbLignesVoies = Application.WorksheetFunction.Ceiling_Precise(voiesTriees.Count / nbColonnes, 1)
+        ligneActuelle = ligneActuelle + nbLignesVoies
+    Next cleCommune
+End Sub
+
+Sub CreerEntetes(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean, ByVal modeAffichage As String)
     '=========================================================================
     ' CRÉATION DES EN-TÊTES SELON LES OPTIONS
     '=========================================================================
@@ -727,56 +1301,80 @@ Function VoieContientDesNumeros(ByVal voie As String) As Boolean
     End If
 End Function
 
-Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean, ByVal modeAffichage As String)
     '=========================================================================
-    ' MISE EN FORME FINALE SELON LES OPTIONS
+    ' MISE EN FORME FINALE SELON LES OPTIONS ET LE MODE
     '=========================================================================
     
-    Dim nbChampsParColonne As Integer
-    nbChampsParColonne = 2 ' Voie + Tournée
-    If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
-    If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
-    
-    ' Ajuster automatiquement les colonnes de voies, forcer les autres en pixels
-    Dim col As Integer
-    For col = 1 To nbColonnes * nbChampsParColonne
-        Dim colType As Integer
-        colType = ((col - 1) Mod nbChampsParColonne) + 1
+    If modeAffichage = "compact" Then
+        ' Mise en forme pour le mode compact
+        Dim nbColCompact As Integer
+        nbColCompact = 2
+        If afficherSecable Then nbColCompact = nbColCompact + 1
+        If afficherSamedi Then nbColCompact = nbColCompact + 1
         
-        Select Case colType
-            Case 1 ' Voie - AutoFit avec minimum
-                ws.Columns(col).AutoFit
-                If ws.Columns(col).ColumnWidth < 25 Then
-                    ws.Columns(col).ColumnWidth = 25
-                End If
-            Case 2 ' Tournée - Largeur forcée à 40 pixels
-                ws.Columns(col).ColumnWidth = 5.43 ' Approximativement 40 pixels
-            Case Else ' Sécable ou Samedi - Largeur forcée à 40 pixels
-                ws.Columns(col).ColumnWidth = 5.43 ' Approximativement 40 pixels
-        End Select
-    Next col
-    
-    ' Centrer horizontalement les en-têtes des colonnes Tournée, Sécable et Samedi
-    For col = 1 To nbColonnes
-        Dim colBase As Integer
-        colBase = (col - 1) * nbChampsParColonne + 1
+        ' Ajuster les largeurs des colonnes
+        ws.Columns(1).ColumnWidth = 25 ' Commune
+        ws.Columns(2).ColumnWidth = 20 ' Classification
         
-        ' Tournée (toujours colBase + 1)
-        ws.Cells(1, colBase + 1).HorizontalAlignment = xlCenter
-        
-        Dim colIndexHeader As Integer
-        colIndexHeader = colBase + 2
+        Dim colIndex As Integer
+        colIndex = 3
         If afficherSecable Then
-            ws.Cells(1, colIndexHeader).HorizontalAlignment = xlCenter ' En-tête Sécable
-            colIndexHeader = colIndexHeader + 1
+            ws.Columns(colIndex).ColumnWidth = 10 ' Sécable principal
+            colIndex = colIndex + 1
+        End If
+        If afficherSamedi Then
+            ws.Columns(colIndex).ColumnWidth = 10 ' Samedi principal
         End If
         
-        If afficherSamedi Then
-            ws.Cells(1, colIndexHeader).HorizontalAlignment = xlCenter ' En-tête Samedi
-        End If
-    Next col
+    Else
+        ' Mise en forme pour le mode complet (code original)
+        Dim nbChampsParColonne As Integer
+        nbChampsParColonne = 2 ' Voie + Tournée
+        If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
+        If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
+        
+        ' Ajuster automatiquement les colonnes de voies, forcer les autres en pixels
+        Dim col As Integer
+        For col = 1 To nbColonnes * nbChampsParColonne
+            Dim colType As Integer
+            colType = ((col - 1) Mod nbChampsParColonne) + 1
+            
+            Select Case colType
+                Case 1 ' Voie - AutoFit avec minimum
+                    ws.Columns(col).AutoFit
+                    If ws.Columns(col).ColumnWidth < 25 Then
+                        ws.Columns(col).ColumnWidth = 25
+                    End If
+                Case 2 ' Tournée - Largeur forcée à 40 pixels
+                    ws.Columns(col).ColumnWidth = 5.43 ' Approximativement 40 pixels
+                Case Else ' Sécable ou Samedi - Largeur forcée à 40 pixels
+                    ws.Columns(col).ColumnWidth = 5.43 ' Approximativement 40 pixels
+            End Select
+        Next col
+        
+        ' Centrer horizontalement les en-têtes des colonnes Tournée, Sécable et Samedi
+        For col = 1 To nbColonnes
+            Dim colBase As Integer
+            colBase = (col - 1) * nbChampsParColonne + 1
+            
+            ' Tournée (toujours colBase + 1)
+            ws.Cells(1, colBase + 1).HorizontalAlignment = xlCenter
+            
+            Dim colIndexHeader As Integer
+            colIndexHeader = colBase + 2
+            If afficherSecable Then
+                ws.Cells(1, colIndexHeader).HorizontalAlignment = xlCenter ' En-tête Sécable
+                colIndexHeader = colIndexHeader + 1
+            End If
+            
+            If afficherSamedi Then
+                ws.Cells(1, colIndexHeader).HorizontalAlignment = xlCenter ' En-tête Samedi
+            End If
+        Next col
+    End If
     
-    ' Figer la première ligne
+    ' Figer la première ligne (commun aux deux modes)
     ws.Rows("2:2").Select
     ActiveWindow.FreezePanes = True
     
