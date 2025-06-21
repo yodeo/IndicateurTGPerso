@@ -214,11 +214,7 @@ End SubSub MiseEnFormeParCommune()
     
     ' 6. AFFICHAGE DES DONNÉES TRIÉES
     '=========================================================================
-    ligneActuelle = 1
-    
-    ' Créer les en-têtes selon le nombre de colonnes et les options
-    Call CreerEntetes(wsResultat, nbColonnes, afficherSecable, afficherSamedi, modeAffichage)
-    ligneActuelle = 3 ' Commencer après les en-têtes
+    ligneActuelle = 1 ' Commencer directement à la ligne 1 pour les deux modes
     
     ' Trier les communes alphabétiquement
     Dim communesTriees As Object
@@ -485,7 +481,7 @@ Sub AfficherModeCompact(ByRef ws As Worksheet, ByRef communesTriees As Object, B
         Select Case classification
             Case "MONO"
                 ' Afficher uniquement le nom avec la tournée entre parenthèses
-                Call AfficherCommuneMono(ws, communeActuelle, infosDistribution, ligneActuelle, afficherSecable, afficherSamedi)
+                Call AfficherCommuneMono(ws, communeActuelle, infosDistribution, ligneActuelle, nbColonnes, afficherSecable, afficherSamedi)
                 ligneActuelle = ligneActuelle + 1
                 
             Case "PLURI"
@@ -500,7 +496,8 @@ Sub AfficherModeCompact(ByRef ws As Worksheet, ByRef communesTriees As Object, B
 End Sub
 
 Sub AfficherCommuneMono(ByRef ws As Worksheet, ByVal commune As String, ByRef infos As Object, _
-                       ByRef ligneActuelle As Long, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
+                       ByRef ligneActuelle As Long, ByVal nbColonnes As Integer, _
+                       ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
     '=========================================================================
     ' AFFICHAGE D'UNE COMMUNE MONO-DISTRIBUÉE
     '=========================================================================
@@ -513,44 +510,26 @@ Sub AfficherCommuneMono(ByRef ws As Worksheet, ByVal commune As String, ByRef in
     Dim texteCommune As String
     texteCommune = UCase(commune) & " (" & infos("tournee_principale") & ")"
     
-    ' Afficher dans la colonne Voie
-    ws.Cells(ligneActuelle, 1) = texteCommune
+    ' Fusionner toutes les cellules selon le nombre de colonnes
+    Dim dernierCol As Integer
+    dernierCol = nbColonnes * nbChampsParColonne
     
-    ' Laisser les autres colonnes vides mais formater
-    Dim colIndex As Integer
-    colIndex = 2
-    
-    ws.Cells(ligneActuelle, colIndex) = "" ' Tournée (vide car dans le nom)
-    colIndex = colIndex + 1
-    
-    If afficherSecable Then
-        ws.Cells(ligneActuelle, colIndex) = infos("secable_principal")
-        colIndex = colIndex + 1
-    End If
-    
-    If afficherSamedi Then
-        ws.Cells(ligneActuelle, colIndex) = infos("samedi_principal")
-    End If
-    
-    ' Mise en forme spéciale pour commune mono
-    With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, nbChampsParColonne))
+    ' Fusionner les cellules et afficher
+    With ws.Range(ws.Cells(ligneActuelle, 1), ws.Cells(ligneActuelle, dernierCol))
+        .Merge
+        .value = texteCommune
         .Font.Bold = True
         .Font.Size = 12
         .Interior.Color = RGB(255, 255, 0) ' Jaune
         .Font.Color = RGB(0, 0, 0) ' Police noire
-        .HorizontalAlignment = xlLeft
+        .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
         .Borders.LineStyle = xlContinuous
         .Borders.Weight = xlMedium
     End With
     
-    ' Centrer les colonnes sécable/samedi
-    If afficherSecable Then
-        ws.Cells(ligneActuelle, nbChampsParColonne - IIf(afficherSamedi, 1, 0)).HorizontalAlignment = xlCenter
-    End If
-    If afficherSamedi Then
-        ws.Cells(ligneActuelle, nbChampsParColonne).HorizontalAlignment = xlCenter
-    End If
+    ' Afficher les infos sécable/samedi dans des cellules séparées si demandé
+    ' (Mais on garde la fusion pour la cohérence visuelle)
 End Sub
 
 Sub AfficherCommunePluri(ByRef ws As Worksheet, ByVal commune As String, ByRef voiesCommune As Object, _
@@ -1286,9 +1265,9 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
         Next col
     End If
     
-    ' Figer la première ligne (commun aux deux modes)
-    ws.Rows("2:2").Select
-    ActiveWindow.FreezePanes = True
+    ' Pas de gel des volets car pas d'en-têtes
+    ' ws.Rows("2:2").Select
+    ' ActiveWindow.FreezePanes = True
     
     ' Sélectionner la cellule A1
     ws.Range("A1").Select
