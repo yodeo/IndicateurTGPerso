@@ -1,0 +1,115 @@
+Function VoieContientDesNumeros(ByVal voie As String) As Boolean
+    '=========================================================================
+    ' VÉRIFIE SI UNE VOIE CONTIENT DES NUMÉROS DE BORNES (PAS DES NUMÉROS DANS LE NOM)
+    ' Exclut les chiffres qui sont dans la partie entre parenthèses du nom de voie
+    ' Format attendu : "MOT_DIRECTEUR (reste de la voie)" + éventuels numéros de bornes
+    '=========================================================================
+    
+    VoieContientDesNumeros = False
+    
+    ' Nettoyer la voie des indicateurs d'indentation
+    Dim voieNettoyee As String
+    voieNettoyee = Trim(voie)
+    If Left(voieNettoyee, 2) = "> " Then
+        voieNettoyee = Trim(Mid(voieNettoyee, 3))
+    ElseIf Left(voieNettoyee, 3) = "   " Then
+        voieNettoyee = Trim(Mid(voieNettoyee, 4))
+    End If
+    
+    ' Séparer la partie nom de voie et la partie bornes
+    Dim partieNomVoie As String
+    Dim partieBornes As String
+    
+    ' Chercher la fin de la partie formatée (après les parenthèses s'il y en a)
+    Dim posFinParenthese As Integer
+    posFinParenthese = InStr(voieNettoyee, ")")
+    
+    If posFinParenthese > 0 Then
+        ' Il y a des parenthèses, la partie bornes commence après
+        partieNomVoie = Left(voieNettoyee, posFinParenthese)
+        partieBornes = Trim(Mid(voieNettoyee, posFinParenthese + 1))
+    Else
+        ' Pas de parenthèses, chercher où se termine le mot directeur
+        Dim mots As Variant
+        mots = Split(voieNettoyee, " ")
+        
+        If UBound(mots) >= 0 Then
+            ' Le premier mot est généralement le mot directeur
+            partieNomVoie = mots(0)
+            
+            ' Le reste pourrait être des bornes si ce sont des nombres
+            Dim i As Integer
+            Dim resteMots As String
+            resteMots = ""
+            
+            For i = 1 To UBound(mots)
+                If resteMots <> "" Then resteMots = resteMots & " "
+                resteMots = resteMots & mots(i)
+            Next i
+            
+            partieBornes = Trim(resteMots)
+        Else
+            partieNomVoie = voieNettoyee
+            partieBornes = ""
+        End If
+    End If
+    
+    ' Analyser seulement la partie bornes pour les vrais numéros de voie
+    If partieBornes <> "" Then
+        ' Vérifier les patterns typiques de bornes
+        If InStr(partieBornes, " à ") > 0 Or _
+           InStr(partieBornes, " / ") > 0 Or _
+           InStr(partieBornes, "à") > 0 Or _
+           InStr(partieBornes, "/") > 0 Or _
+           InStr(partieBornes, "-") > 0 Then
+            
+            ' Vérifier qu'il y a des chiffres dans cette partie
+            Dim j As Integer
+            For j = 1 To Len(partieBornes)
+                If IsNumeric(Mid(partieBornes, j, 1)) Then
+                    VoieContientDesNumeros = True
+                    Exit Function
+                End If
+            Next j
+        End If
+        
+        ' Vérifier si la partie bornes est entièrement numérique (numéro isolé)
+        If IsNumeric(partieBornes) And Len(partieBornes) > 0 Then
+            VoieContientDesNumeros = True
+            Exit Function
+        End If
+        
+        ' Vérifier si la partie bornes contient des patterns de numéros de voie
+        ' (comme "25", "185 à 295", etc.) mais pas des noms comme "2 LAURIERS"
+        Dim motsBornes As Variant
+        motsBornes = Split(partieBornes, " ")
+        
+        Dim k As Integer
+        For k = LBound(motsBornes) To UBound(motsBornes)
+            Dim mot As String
+            mot = Trim(motsBornes(k))
+            
+            ' Si c'est un nombre pur et qu'il n'est pas suivi de lettres dans le même "mot"
+            If IsNumeric(mot) And Len(mot) > 0 And Len(mot) <= 4 Then
+                ' Vérifier le contexte : pas de mots comme "LAURIERS", "CHENES", etc. après
+                Dim motSuivant As String
+                motSuivant = ""
+                If k < UBound(motsBornes) Then
+                    motSuivant = UCase(Trim(motsBornes(k + 1)))
+                End If
+                
+                ' Si le mot suivant n'est pas un nom commun, c'est probablement un numéro de voie
+                If motSuivant = "" Or _
+                   motSuivant = "À" Or _
+                   motSuivant = "/" Or _
+                   IsNumeric(motSuivant) Then
+                    VoieContientDesNumeros = True
+                    Exit Function
+                End If
+            End If
+        Next k
+    End If
+    
+    ' Si on arrive ici, aucun vrai numéro de borne n'a été détecté
+    VoieContientDesNumeros = False
+End Function
