@@ -71,7 +71,9 @@ Sub CreerEntetes(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByVal affic
             End With
         Next col
     End If
-End SubSub MiseEnFormeParCommune()
+End Sub
+
+Sub MiseEnFormeParCommune()
     '=========================================================================
     ' MISE EN FORME DES DONNÉES PAR COMMUNE
     ' Regroupe les voies par commune et les affiche sur le nombre de colonnes choisi
@@ -874,46 +876,7 @@ Sub AfficherModeComplet(ByRef ws As Worksheet, ByRef communesTriees As Object, B
         ligneActuelle = ligneActuelle + nbLignesVoies
     Next cleCommune
 End Sub
-    '=========================================================================
-    ' CRÉATION DES EN-TÊTES SELON LES OPTIONS
-    '=========================================================================
-    Dim col As Integer
-    Dim nbChampsParColonne As Integer
     
-    ' Calculer le nombre de champs par colonne
-    nbChampsParColonne = 2 ' Voie + Tournée toujours présents
-    If afficherSecable Then nbChampsParColonne = nbChampsParColonne + 1
-    If afficherSamedi Then nbChampsParColonne = nbChampsParColonne + 1
-    
-    For col = 1 To nbColonnes
-        Dim colBase As Integer
-        colBase = (col - 1) * nbChampsParColonne + 1
-        
-        Dim colIndex As Integer
-        colIndex = colBase
-        
-        ws.Cells(1, colIndex) = "Voie"
-        colIndex = colIndex + 1
-        ws.Cells(1, colIndex) = "Tournée"
-        colIndex = colIndex + 1
-        
-        If afficherSecable Then
-            ws.Cells(1, colIndex) = "Sécable"
-            colIndex = colIndex + 1
-        End If
-        
-        If afficherSamedi Then
-            ws.Cells(1, colIndex) = "Samedi"
-        End If
-        
-        ' Mise en forme des en-têtes
-        With ws.Range(ws.Cells(1, colBase), ws.Cells(1, colBase + nbChampsParColonne - 1))
-            .Font.Bold = True
-            .Interior.Color = RGB(180, 198, 231)
-            .HorizontalAlignment = xlCenter
-        End With
-    Next col
-End Sub
 
 Sub AfficherNomCommune(ByRef ws As Worksheet, ByVal commune As String, ByVal ligne As Long, ByVal nbColonnes As Integer, ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
     '=========================================================================
@@ -1107,7 +1070,7 @@ End Sub
 Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
     '=========================================================================
     ' EXTRAIT LE MOT DIRECTEUR D'UNE VOIE FORMATÉE
-    ' Ex: "PIC (ROUTE) 25" → "PIC"
+    ' Ex: "PIC (ROUTE) 25" ? "PIC"
     '=========================================================================
     Dim posParenthese As Integer
     posParenthese = InStr(voieComplete, " (")
@@ -1340,3 +1303,4 @@ Sub AppliquerMiseEnForme(ByRef ws As Worksheet, ByVal nbColonnes As Integer, ByV
     ' Sélectionner la cellule A1
     ws.Range("A1").Select
 End Sub
+
