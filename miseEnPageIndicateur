@@ -138,30 +138,26 @@ End SubSub MiseEnFormeParCommune()
     If afficherSecable Then nbChampsSupp = nbChampsSupp + 1
     If afficherSamedi Then nbChampsSupp = nbChampsSupp + 1
     
-    ' 3. DEMANDER LE NOMBRE DE COLONNES (seulement en mode complet)
+    ' 3. DEMANDER LE NOMBRE DE COLONNES
     '=========================================================================
-    If modeAffichage = "complet" Then
-        Do
-            Dim reponse As String
-            reponse = InputBox("Sur combien de colonnes souhaitez-vous afficher les voies ?" & vbCrLf & _
-                              "Entrez un nombre entre 1 et 6 :", "Nombre de colonnes", "1")
-            
-            If reponse = "" Then Exit Sub ' Annulation
-            
-            If IsNumeric(reponse) Then
-                nbColonnes = CInt(reponse)
-                If nbColonnes >= 1 And nbColonnes <= 6 Then
-                    Exit Do
-                Else
-                    MsgBox "Veuillez entrer un nombre entre 1 et 6.", vbExclamation
-                End If
+    Do
+        Dim reponse As String
+        reponse = InputBox("Sur combien de colonnes souhaitez-vous afficher les voies ?" & vbCrLf & _
+                          "Entrez un nombre entre 1 et 6 :", "Nombre de colonnes", "1")
+        
+        If reponse = "" Then Exit Sub ' Annulation
+        
+        If IsNumeric(reponse) Then
+            nbColonnes = CInt(reponse)
+            If nbColonnes >= 1 And nbColonnes <= 6 Then
+                Exit Do
             Else
-                MsgBox "Veuillez entrer un nombre valide.", vbExclamation
+                MsgBox "Veuillez entrer un nombre entre 1 et 6.", vbExclamation
             End If
-        Loop
-    Else
-        nbColonnes = 1 ' Mode compact : une seule colonne
-    End If
+        Else
+            MsgBox "Veuillez entrer un nombre valide.", vbExclamation
+        End If
+    Loop
     
     ' 4. CRÉATION DE LA FEUILLE RÉSULTAT
     '=========================================================================
@@ -254,7 +250,7 @@ End SubSub MiseEnFormeParCommune()
     MsgBox "Mise en forme terminée !" & vbCrLf & _
            "Mode d'affichage : " & UCase(modeAffichage) & vbCrLf & _
            "Communes traitées : " & communesTriees.Count & vbCrLf & _
-           IIf(modeAffichage = "complet", "Affichage sur " & nbColonnes & " colonne(s)" & vbCrLf, "") & _
+           "Affichage sur " & nbColonnes & " colonne(s)" & vbCrLf & _
            "Champs affichés : " & champsAffiches, vbInformation
 End Sub
 
