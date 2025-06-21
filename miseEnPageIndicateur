@@ -802,50 +802,8 @@ Function TrouverElementDominant(ByRef dictionnaire As Object) As String
         End If
     Next cle
     
-    TrouverElementDominant = elementDominant
+    Set TrouverElementDominant = elementDominant
 End Function
-
-Sub FormaterLigneClassification(ByRef ws As Worksheet, ByVal ligne As Long, ByVal classification As String, _
-                               ByVal afficherSecable As Boolean, ByVal afficherSamedi As Boolean)
-    '=========================================================================
-    ' FORMATE UNE LIGNE SELON SA CLASSIFICATION
-    '=========================================================================
-    Dim nbColonnes As Integer
-    nbColonnes = 2 ' Commune + Classification
-    If afficherSecable Then nbColonnes = nbColonnes + 1
-    If afficherSamedi Then nbColonnes = nbColonnes + 1
-    
-    With ws.Range(ws.Cells(ligne, 1), ws.Cells(ligne, nbColonnes))
-        .Borders.LineStyle = xlContinuous
-        .VerticalAlignment = xlCenter
-        
-        Select Case classification
-            Case "MONO"
-                .Interior.Color = RGB(144, 238, 144) ' Vert clair
-                .Font.Color = RGB(0, 0, 0) ' Noir
-            Case "PLURI"
-                .Interior.Color = RGB(255, 255, 0) ' Jaune
-                .Font.Color = RGB(0, 0, 0) ' Noir
-            Case "MULTI"
-                .Interior.Color = RGB(255, 182, 193) ' Rose clair
-                .Font.Color = RGB(0, 0, 0) ' Noir
-        End Select
-    End With
-    
-    ' Mise en forme spécifique des colonnes
-    ws.Cells(ligne, 1).Font.Bold = True ' Nom de commune en gras
-    ws.Cells(ligne, 2).HorizontalAlignment = xlCenter ' Classification centrée
-    
-    Dim colIndex As Integer
-    colIndex = 3
-    If afficherSecable Then
-        ws.Cells(ligne, colIndex).HorizontalAlignment = xlCenter
-        colIndex = colIndex + 1
-    End If
-    If afficherSamedi Then
-        ws.Cells(ligne, colIndex).HorizontalAlignment = xlCenter
-    End If
-End Sub
 
 Sub AfficherModeComplet(ByRef ws As Worksheet, ByRef communesTriees As Object, ByRef ligneActuelle As Long, _
                        ByVal nbColonnes As Integer, ByRef wsSource As Worksheet, _
