@@ -453,12 +453,19 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 Dim changementLettre As Boolean
                 changementLettre = (lettreActuelle <> lettrePrecedente And lettrePrecedente <> "")
                 
-                ' Formater la voie avec indicateur de changement de lettre (flèche vers la droite)
+                ' Gestion spéciale pour la première voie de chaque commune
+                Dim premiereVoieCommune As Boolean
+                premiereVoieCommune = (voieIndex = 0)
+                If premiereVoieCommune Then
+                    changementLettre = True ' Forcer l'affichage avec ">" pour la première voie
+                End If
+                
+                ' Formater la voie avec indicateur de changement de lettre et indentation
                 Dim voieFormatee As String
                 If changementLettre Then
-                    voieFormatee = ">> " & voieComplete ' Flèche vers la droite pour le changement
+                    voieFormatee = "> " & voieComplete ' Indicateur pour le changement
                 Else
-                    voieFormatee = voieComplete
+                    voieFormatee = "   " & voieComplete ' Indentation pour les voies de même lettre
                 End If
                 
                 ' Écrire les données selon les options
@@ -488,6 +495,11 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 ' Mise en forme du mot directeur en gras
                 Call MettreMotDirecteurEnGras(ws.Cells(ligneActuelle, colBase), motDirecteur)
                 
+                ' Mise en forme spéciale pour l'indicateur de changement de lettre
+                If changementLettre Then
+                    Call FormaterIndicateurChangement(ws.Cells(ligneActuelle, colBase))
+                End If
+                
                 ' Vérifier s'il y a des numéros (bornes) dans la voie
                 Dim aDesNumeros As Boolean
                 aDesNumeros = VoieContientDesNumeros(voieComplete)
@@ -509,7 +521,9 @@ Sub AfficherVoiesReparties(ByRef ws As Worksheet, ByRef voiesArray As Variant, B
                 ' Mise en forme spécifique pour la colonne Voie
                 With ws.Cells(ligneActuelle, colBase)
                     .HorizontalAlignment = xlLeft ' Voie à gauche
-                    .IndentLevel = 1 ' Léger décalage pour aérer l'affichage
+                    
+                    ' Pas d'indentation supplémentaire car elle est déjà dans le texte
+                    .IndentLevel = 0
                     
                     ' Fond vert et police blanche si la voie contient des numéros
                     If aDesNumeros Then
@@ -577,11 +591,30 @@ Function ExtraireMotDirecteur(ByVal voieComplete As String) As String
         End If
     End If
     
-    ' Enlever la flèche si elle est présente
-    If Left(ExtraireMotDirecteur, 3) = ">> " Then
+    ' Enlever l'indicateur ou l'indentation s'ils sont présents
+    If Left(ExtraireMotDirecteur, 2) = "> " Then
+        ExtraireMotDirecteur = Trim(Mid(ExtraireMotDirecteur, 3))
+    ElseIf Left(ExtraireMotDirecteur, 3) = "   " Then
         ExtraireMotDirecteur = Trim(Mid(ExtraireMotDirecteur, 4))
     End If
 End Function
+
+Sub FormaterIndicateurChangement(ByRef cellule As Range)
+    '=========================================================================
+    ' FORMATE L'INDICATEUR ">" EN BLEU FONCÉ ET GRAS
+    '=========================================================================
+    Dim texteComplet As String
+    texteComplet = cellule.value
+    
+    ' Vérifier si le texte commence par ">"
+    If Left(texteComplet, 2) = "> " Then
+        ' Mettre le ">" en bleu foncé et gras
+        With cellule.Characters(1, 1).Font
+            .Bold = True
+            .Color = RGB(0, 0, 139) ' Bleu foncé
+        End With
+    End If
+End Sub
 
 Sub MettreMotDirecteurEnGras(ByRef cellule As Range, ByVal motDirecteur As String)
     '=========================================================================
